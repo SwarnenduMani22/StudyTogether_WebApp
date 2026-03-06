@@ -1,23 +1,34 @@
-import { StrictMode } from "react";
+import React from "react";
 import { createRoot } from "react-dom/client";
-import "./index.css";
 import App from "./App.jsx";
 
-/* 🌙 Load saved theme safely */
-try {
-  const savedTheme = localStorage.getItem("theme");
+import "./index.css";
+import { AuthProvider } from "./context/AuthContext";
 
-  if (savedTheme === "dark") {
-    document.documentElement.classList.add("dark");
-  } else {
-    document.documentElement.classList.remove("dark");
+/* ================= LOAD SAVED THEME ================= */
+
+const loadTheme = () => {
+  try {
+    const savedTheme = localStorage.getItem("theme");
+
+    if (savedTheme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  } catch (error) {
+    console.warn("Theme load error:", error);
   }
-} catch (error) {
-  console.warn("Theme load error:", error);
-}
+};
+
+loadTheme();
+
+/* ================= RENDER APP ================= */
 
 createRoot(document.getElementById("root")).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+  <React.StrictMode>
+    <AuthProvider>
+      <App />
+    </AuthProvider>
+  </React.StrictMode>,
 );

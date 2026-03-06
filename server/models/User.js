@@ -6,6 +6,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      minlength: 3,
     },
 
     email: {
@@ -14,14 +15,16 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
+      match: [/^\S+@\S+\.\S+$/, "Please use a valid email address"],
     },
 
     password: {
       type: String,
       required: true,
+      minlength: 6,
+      select: false,
     },
 
-    // 🔥 Added for future admin system
     role: {
       type: String,
       enum: ["user", "admin"],
@@ -29,8 +32,21 @@ const userSchema = new mongoose.Schema(
     },
   },
   {
-    timestamps: true, // createdAt & updatedAt automatically add hobe
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   },
 );
+
+/* ================= SAFE USER OBJECT ================= */
+
+userSchema.methods.toSafeObject = function () {
+  return {
+    _id: this._id,
+    name: this.name,
+    email: this.email,
+    role: this.role,
+  };
+};
 
 export default mongoose.model("User", userSchema);

@@ -2,7 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ---------------- Base Layout ---------------- */
+/* ================= Base Layout ================= */
+
 html,
 body,
 #root {
@@ -10,54 +11,98 @@ body,
 }
 
 body {
-  @apply bg-gray-50 dark:bg-gray-900 
-         text-gray-900 dark:text-gray-100 
-         font-sans 
-         transition-colors duration-300;
+  @apply bg-gray-50 dark:bg-gray-900
+         text-gray-900 dark:text-gray-100
+         font-sans
+         transition-colors duration-300
+         antialiased;
 }
 
-/* ---------------- Branding ---------------- */
+/* ================= Container ================= */
+
+.container-main {
+  @apply max-w-6xl mx-auto px-4;
+}
+
+/* ================= Branding ================= */
+
 .brand {
-  @apply text-2xl font-bold text-indigo-600 dark:text-indigo-400;
+  @apply text-2xl font-bold text-indigo-600 dark:text-indigo-400 tracking-tight;
 }
 
-/* ---------------- Card Component ---------------- */
+/* ================= Card ================= */
+
 .card {
-  @apply bg-white dark:bg-gray-800 
+  @apply bg-white dark:bg-gray-800
          shadow-md hover:shadow-xl
-         rounded-xl 
-         p-6 
-         w-full 
-         max-w-md 
-         mx-auto 
-         transition;
+         rounded-xl
+         p-6
+         transition
+         duration-300;
 }
 
-/* ---------------- Form Input ---------------- */
+/* ================= Input ================= */
+
 .input {
-  @apply w-full 
-         px-3 py-2 
+  @apply w-full
+         px-3 py-2
          border border-gray-300 dark:border-gray-600
-         rounded-md 
-         bg-transparent 
-         focus:outline-none 
-         focus:ring-2 
+         rounded-md
+         bg-white dark:bg-gray-800
+         text-gray-900 dark:text-white
+         focus:outline-none
+         focus:ring-2
          focus:ring-indigo-400
          transition;
 }
 
-/* ---------------- Primary Button ---------------- */
+/* ================= Buttons ================= */
+
 .btn-primary {
-  @apply w-full 
+  @apply w-full
          bg-indigo-600 hover:bg-indigo-700
-         text-white 
-         font-semibold 
-         py-2 px-4 
-         rounded-md 
+         text-white
+         font-semibold
+         py-2 px-4
+         rounded-md
+         transition
+         duration-200;
+}
+
+.btn-secondary {
+  @apply bg-gray-200 hover:bg-gray-300
+         dark:bg-gray-700 dark:hover:bg-gray-600
+         text-gray-900 dark:text-white
+         py-2 px-4
+         rounded-md
          transition;
 }
 
-/* ---------------- Smooth Scroll ---------------- */
+/* ================= Badge ================= */
+
+.badge {
+  @apply inline-block px-2 py-1 text-xs font-medium
+         bg-indigo-100 text-indigo-700
+         dark:bg-indigo-900 dark:text-indigo-300
+         rounded;
+}
+
+/* ================= Smooth Scroll ================= */
+
 html {
   scroll-behavior: smooth;
+}
+
+/* ================= Scrollbar ================= */
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-400 rounded;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-500;
 }

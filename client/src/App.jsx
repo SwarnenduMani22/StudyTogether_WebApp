@@ -7,47 +7,64 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
+
 import Register from "./pages/Register";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
 import Admin from "./pages/Admin";
-import { useState, useEffect, useRef } from "react";
+import Papers from "./pages/Papers";
+import AdminUpload from "./pages/AdminUpload";
+import Home from "./pages/Home";
 
-/* 🔐 Normal Protected Route */
+import { useState, useEffect, useRef } from "react";
+import { useAuth } from "./context/AuthContext";
+
+/* ================= SCROLL TO TOP ================= */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return null;
+}
+
+/* ================= Protected Route ================= */
 function ProtectedRoute({ children }) {
-  const token = localStorage.getItem("token");
+  const { token } = useAuth();
   return token ? children : <Navigate to="/login" replace />;
 }
 
-/* 🔒 Admin Only Route */
+/* ================= Admin Route ================= */
 function AdminRoute({ children }) {
-  const user = JSON.parse(localStorage.getItem("user"));
+  const { user } = useAuth();
 
   if (!user) return <Navigate to="/login" replace />;
-  return user.role === "admin" ? (
-    children
-  ) : (
-    <Navigate to="/dashboard" replace />
-  );
+  if (user.role !== "admin") return <Navigate to="/dashboard" replace />;
+
+  return children;
 }
 
+/* ================= Navbar ================= */
 function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
 
+  const { user, logout } = useAuth();
+
   const [open, setOpen] = useState(false);
+  const [mobileMenu, setMobileMenu] = useState(false);
+
   const [darkMode, setDarkMode] = useState(
     localStorage.getItem("theme") === "dark",
   );
 
-  const user = JSON.parse(localStorage.getItem("user"));
-
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    navigate("/");
+    logout();
+    navigate("/login");
   };
 
   const toggleTheme = () => {
@@ -58,104 +75,112 @@ function Navbar() {
       document.documentElement.classList.add("dark");
       localStorage.setItem("theme", "dark");
     }
+
     setDarkMode(!darkMode);
   };
 
-  /* 👇 Close dropdown on outside click */
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+    function handleClickOutside(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setOpen(false);
       }
     }
 
     document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const hideDashboardLink = ["/login", "/register"].includes(location.pathname);
+
   return (
-    <header className="max-w-5xl mx-auto flex items-center justify-between mb-8">
-      {/* 🔥 SMART BRAND LOGIC */}
-      {location.pathname === "/login" || location.pathname === "/register" ? (
-        <Link to="/" className="brand hover:opacity-80 transition">
+    <header className="sticky top-0 z-50 bg-white dark:bg-gray-900 max-w-6xl mx-auto flex items-center justify-between mb-8 p-4">
+      {/* Brand */}
+      {hideDashboardLink ? (
+        <Link to="/" className="brand">
           StudyTogether
         </Link>
-      ) : location.pathname === "/" || location.pathname === "/dashboard" ? (
-        <div className="brand">StudyTogether</div>
       ) : (
-        <Link to="/dashboard" className="brand hover:opacity-80 transition">
+        <Link to="/dashboard" className="brand">
           StudyTogether
         </Link>
       )}
 
-      {/* Right Section */}
-      <nav className="flex items-center space-x-4">
-        {location.pathname !== "/dashboard" &&
-        location.pathname !== "/profile" &&
-        location.pathname !== "/admin" ? (
+      {/* Mobile Menu Button */}
+      <button
+        className="md:hidden text-2xl"
+        onClick={() => setMobileMenu(!mobileMenu)}
+      >
+        ☰
+      </button>
+
+      {/* Desktop Menu */}
+      <nav className="hidden md:flex items-center space-x-4">
+        {!user ? (
           <>
-            <Link
-              to="/login"
-              className="text-sm text-indigo-600 hover:underline"
-            >
+            <Link to="/login" className="text-indigo-600">
               Login
             </Link>
-            <Link
-              to="/register"
-              className="text-sm text-indigo-600 hover:underline"
-            >
+
+            <Link to="/register" className="text-indigo-600">
               Register
             </Link>
           </>
         ) : (
           <div className="flex items-center space-x-3">
-            {/* 🌙 Theme Button */}
+            {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
-              className="w-10 h-10 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center"
+              className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-lg"
             >
               {darkMode ? "☀️" : "🌙"}
             </button>
 
-            {/* 👤 Profile Dropdown */}
+            {/* Profile Dropdown */}
             <div ref={dropdownRef} className="relative">
               <button
                 onClick={() => setOpen(!open)}
-                className="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold"
+                className="w-10 h-10 rounded-full bg-indigo-600 text-white"
               >
-                {user?.name?.charAt(0).toUpperCase() || "U"}
+                {user?.name?.charAt(0)?.toUpperCase() || "U"}
               </button>
 
               {open && (
-                <div className="absolute right-0 mt-2 w-44 bg-white dark:bg-gray-800 shadow-lg rounded-lg border dark:border-gray-700">
-                  {/* Admin Button */}
+                <div className="absolute right-0 mt-2 w-44 bg-white dark:bg-gray-800 shadow-lg rounded-lg">
                   {user?.role === "admin" && (
                     <button
-                      onClick={() => {
-                        setOpen(false);
-                        navigate("/admin");
-                      }}
-                      className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm text-indigo-600"
+                      onClick={() => navigate("/admin")}
+                      className="block w-full text-left px-4 py-2 text-indigo-600"
                     >
                       Admin Panel
                     </button>
                   )}
 
                   <button
-                    onClick={() => {
-                      setOpen(false);
-                      navigate("/profile");
-                    }}
-                    className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm"
+                    onClick={() => navigate("/papers")}
+                    className="block w-full text-left px-4 py-2"
+                  >
+                    Papers
+                  </button>
+
+                  {user?.role === "admin" && (
+                    <button
+                      onClick={() => navigate("/upload")}
+                      className="block w-full text-left px-4 py-2"
+                    >
+                      Upload Paper
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => navigate("/profile")}
+                    className="block w-full text-left px-4 py-2"
                   >
                     Profile
                   </button>
 
                   <button
                     onClick={handleLogout}
-                    className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-red-600 text-sm"
+                    className="block w-full text-left px-4 py-2 text-red-500"
                   >
                     Logout
                   </button>
@@ -165,18 +190,67 @@ function Navbar() {
           </div>
         )}
       </nav>
+
+      {/* Mobile Menu */}
+      {mobileMenu && user && (
+        <div className="absolute top-16 right-4 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 md:hidden space-y-3">
+          <button
+            onClick={() => navigate("/papers")}
+            className="block w-full text-left"
+          >
+            Papers
+          </button>
+
+          <button
+            onClick={() => navigate("/profile")}
+            className="block w-full text-left"
+          >
+            Profile
+          </button>
+
+          {user.role === "admin" && (
+            <>
+              <button
+                onClick={() => navigate("/admin")}
+                className="block w-full text-left"
+              >
+                Admin Panel
+              </button>
+
+              <button
+                onClick={() => navigate("/upload")}
+                className="block w-full text-left"
+              >
+                Upload Paper
+              </button>
+            </>
+          )}
+
+          <button
+            onClick={handleLogout}
+            className="block w-full text-left text-red-500"
+          >
+            Logout
+          </button>
+        </div>
+      )}
     </header>
   );
 }
 
+/* ================= APP ================= */
 export default function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6 transition-colors duration-300">
+      <ScrollToTop />
+
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
         <Navbar />
 
-        <main className="max-w-5xl mx-auto">
+        <main className="max-w-6xl mx-auto">
           <Routes>
+            <Route path="/" element={<Home />} />
+
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
 
@@ -199,6 +273,15 @@ export default function App() {
             />
 
             <Route
+              path="/papers"
+              element={
+                <ProtectedRoute>
+                  <Papers />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
               path="/admin"
               element={
                 <AdminRoute>
@@ -208,16 +291,11 @@ export default function App() {
             />
 
             <Route
-              path="/"
+              path="/upload"
               element={
-                <div className="text-center">
-                  <h1 className="text-3xl font-semibold">
-                    Welcome to StudyTogether
-                  </h1>
-                  <p className="mt-4 text-gray-600 dark:text-gray-300">
-                    Please login or register to continue.
-                  </p>
-                </div>
+                <AdminRoute>
+                  <AdminUpload />
+                </AdminRoute>
               }
             />
           </Routes>

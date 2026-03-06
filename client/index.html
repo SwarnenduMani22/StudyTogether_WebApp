@@ -3,18 +3,37 @@
   <head>
     <meta charset="UTF-8" />
 
+    <!-- Responsive -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <!-- SEO -->
+    <title>StudyTogether | Share Study Materials</title>
     <meta
       name="description"
-      content="StudyTogether - A modern study platform for sharing and accessing academic papers."
+      content="StudyTogether is a modern platform where students can share, search and access academic papers easily."
     />
-    <meta name="theme-color" content="#4f46e5" />
 
-    <title>StudyTogether</title>
+    <!-- Theme -->
+    <meta name="theme-color" content="#6366f1" />
 
+    <!-- Open Graph (Social Share) -->
+    <meta property="og:title" content="StudyTogether" />
+    <meta
+      property="og:description"
+      content="Access study materials and academic papers easily."
+    />
+    <meta property="og:type" content="website" />
+
+    <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
 
+    <!-- Google Font -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Theme Loader -->
     <script>
       try {
         const savedTheme = localStorage.getItem("theme");
@@ -25,12 +44,19 @@
         } else if (savedTheme === "dark") {
           document.documentElement.classList.add("dark");
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn("Theme load error", e);
+      }
     </script>
   </head>
 
-  <body class="bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+  <body
+    class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300 font-sans"
+  >
+    <!-- React Root -->
     <div id="root"></div>
+
+    <!-- React App -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
