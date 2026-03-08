@@ -1,36 +1,85 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 
-const verifyToken = async (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
   try {
-    /* ================= GET TOKEN ================= */
+    /* ================= ENV CHECK ================= */
+
+    const JWT_SECRET = process.env.JWT_SECRET;
+
+    if (!JWT_SECRET) {
+      console.error("❌ JWT_SECRET missing in environment variables");
+
+      return res.status(500).json({
+        success: false,
+        error: "Server configuration error",
+      });
+    }
+
+    /* ================= GET AUTH HEADER ================= */
 
     const authHeader = req.headers.authorization;
 
-    if (!authHeader) {
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({
-        error: "Authorization header missing",
+        success: false,
+        error: "Authorization token missing or invalid",
       });
     }
 
-    if (!authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({
-        error: "Invalid authorization format",
-      });
-    }
+    /* ================= EXTRACT TOKEN ================= */
 
     const token = authHeader.split(" ")[1];
 
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: "Token missing",
+      });
+    }
+
     /* ================= VERIFY TOKEN ================= */
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    let decoded;
+
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch (error) {
+      if (error.name === "TokenExpiredError") {
+        return res.status(401).json({
+          success: false,
+          error: "Token expired",
+        });
+      }
+
+      if (error.name === "JsonWebTokenError") {
+        return res.status(401).json({
+          success: false,
+          error: "Invalid token",
+        });
+      }
+
+      throw error;
+    }
+
+    /* ================= TOKEN PAYLOAD CHECK ================= */
+
+    if (!decoded?.id) {
+      return res.status(401).json({
+        success: false,
+        error: "Invalid token payload",
+      });
+    }
 
     /* ================= FIND USER ================= */
 
-    const user = await User.findById(decoded.id).select("-password");
+    const user = await User.findById(decoded.id)
+      .select("_id name email role")
+      .lean();
 
     if (!user) {
       return res.status(404).json({
+        success: false,
         error: "User not found",
       });
     }
@@ -41,26 +90,13 @@ const verifyToken = async (req, res, next) => {
 
     next();
   } catch (error) {
-    /* ================= TOKEN ERRORS ================= */
+    console.error("❌ Auth middleware error:", error.message);
 
-    if (error.name === "TokenExpiredError") {
-      return res.status(401).json({
-        error: "Token expired",
-      });
-    }
-
-    if (error.name === "JsonWebTokenError") {
-      return res.status(401).json({
-        error: "Invalid token",
-      });
-    }
-
-    console.error("Auth middleware error:", error.message);
-
-    return res.status(401).json({
+    return res.status(500).json({
+      success: false,
       error: "Authentication failed",
     });
   }
 };
 
-export default verifyToken;
+export default authMiddleware;

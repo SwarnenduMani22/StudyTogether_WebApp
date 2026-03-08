@@ -1,22 +1,34 @@
 import express from "express";
+import mongoose from "mongoose";
+
 import verifyToken from "../middleware/authMiddleware.js";
 import verifyAdmin from "../middleware/adminMiddleware.js";
+
 import User from "../models/User.js";
 
 const router = express.Router();
 
-/* ================= GET ALL USERS ================= */
+/* =====================================================
+GET ALL USERS (ADMIN)
+GET /api/v1/admin/users
+===================================================== */
+
 router.get("/users", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const page = Number(req.query.page) || 1;
-    const limit = 10;
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.max(Number(req.query.limit) || 10, 1);
     const skip = (page - 1) * limit;
 
-    const search = req.query.search || "";
+    const search = (req.query.search || "").trim();
 
-    const filter = {
-      name: { $regex: search, $options: "i" },
-    };
+    const filter = search
+      ? {
+          $or: [
+            { name: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+          ],
+        }
+      : {};
 
     const users = await User.find(filter)
       .select("-password")
@@ -24,105 +36,147 @@ router.get("/users", verifyToken, verifyAdmin, async (req, res) => {
       .limit(limit)
       .sort({ createdAt: -1 });
 
-    const total = await User.countDocuments(filter);
+    const totalUsers = await User.countDocuments(filter);
 
     res.json({
+      success: true,
       users,
-      totalPages: Math.ceil(total / limit),
       currentPage: page,
-      totalUsers: total,
+      totalPages: Math.ceil(totalUsers / limit),
+      totalUsers,
     });
   } catch (error) {
-    console.error("Fetch users error:", error.message);
+    console.error("Fetch users error:", error);
 
     res.status(500).json({
+      success: false,
       error: "Server error while fetching users",
     });
   }
 });
 
-/* ================= DELETE USER ================= */
+/* =====================================================
+DELETE USER
+DELETE /api/v1/admin/users/:id
+===================================================== */
+
 router.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    if (req.user.id === req.params.id) {
+    const userId = req.params.id;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({
-        error: "You cannot delete yourself",
+        success: false,
+        error: "Invalid user ID",
       });
     }
 
-    const user = await User.findById(req.params.id);
+    /* Prevent deleting yourself */
+
+    if (req.user._id.toString() === userId) {
+      return res.status(400).json({
+        success: false,
+        error: "You cannot delete your own account",
+      });
+    }
+
+    const user = await User.findById(userId);
 
     if (!user) {
       return res.status(404).json({
+        success: false,
         error: "User not found",
       });
     }
 
     /* Prevent deleting last admin */
+
     if (user.role === "admin") {
       const adminCount = await User.countDocuments({ role: "admin" });
 
       if (adminCount <= 1) {
         return res.status(400).json({
+          success: false,
           error: "Cannot delete the last admin",
         });
       }
     }
 
-    await User.findByIdAndDelete(req.params.id);
+    await user.deleteOne();
 
     res.json({
+      success: true,
       message: "User deleted successfully",
     });
   } catch (error) {
-    console.error("Delete user error:", error.message);
+    console.error("Delete user error:", error);
 
     res.status(500).json({
-      error: "Server error",
+      success: false,
+      error: "Server error while deleting user",
     });
   }
 });
 
-/* ================= CHANGE ROLE ================= */
+/* =====================================================
+CHANGE USER ROLE
+PUT /api/v1/admin/users/:id/role
+===================================================== */
+
 router.put("/users/:id/role", verifyToken, verifyAdmin, async (req, res) => {
   try {
+    const userId = req.params.id;
     const { role } = req.body;
 
-    if (!["user", "admin"].includes(role)) {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(400).json({
-        error: "Invalid role",
+        success: false,
+        error: "Invalid user ID",
       });
     }
 
-    if (req.user.id === req.params.id) {
+    if (!role || !["user", "admin"].includes(role)) {
       return res.status(400).json({
+        success: false,
+        error: "Invalid role value",
+      });
+    }
+
+    /* Prevent self role change */
+
+    if (req.user._id.toString() === userId) {
+      return res.status(400).json({
+        success: false,
         error: "You cannot change your own role",
       });
     }
 
-    const user = await User.findById(req.params.id);
+    const user = await User.findById(userId);
 
     if (!user) {
       return res.status(404).json({
+        success: false,
         error: "User not found",
       });
     }
 
-    const updatedUser = await User.findByIdAndUpdate(
-      req.params.id,
-      { role },
-      { new: true },
-    ).select("-password");
+    user.role = role;
+
+    await user.save();
+
+    const safeUser = await User.findById(userId).select("-password");
 
     res.json({
+      success: true,
       message: "Role updated successfully",
-      user: updatedUser,
+      user: safeUser,
     });
   } catch (error) {
-    console.error("Role update error:", error.message);
+    console.error("Role update error:", error);
 
     res.status(500).json({
-      error: "Server error",
+      success: false,
+      error: "Server error while updating role",
     });
   }
 });

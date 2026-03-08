@@ -2,11 +2,14 @@ import mongoose from "mongoose";
 
 const paperSchema = new mongoose.Schema(
   {
+    /* ================= BASIC INFO ================= */
+
     title: {
       type: String,
       required: [true, "Paper title is required"],
       trim: true,
       maxlength: 200,
+      index: true,
     },
 
     subject: {
@@ -20,6 +23,7 @@ const paperSchema = new mongoose.Schema(
         "Software Engineering",
         "Artificial Intelligence",
       ],
+      index: true,
     },
 
     semester: {
@@ -27,6 +31,7 @@ const paperSchema = new mongoose.Schema(
       required: [true, "Semester is required"],
       min: 1,
       max: 8,
+      index: true,
     },
 
     pdfLink: {
@@ -39,25 +44,64 @@ const paperSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true,
     },
+
+    /* ================= ADMIN APPROVAL ================= */
+
+    status: {
+      type: String,
+      enum: ["pending", "approved"],
+      default: "pending",
+      index: true,
+    },
+
+    /* ================= ANALYTICS ================= */
 
     views: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     downloads: {
       type: Number,
       default: 0,
+      min: 0,
     },
+
+    /* ================= RATINGS ================= */
+
+    ratings: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+
+        value: {
+          type: Number,
+          required: true,
+          min: 1,
+          max: 5,
+        },
+      },
+    ],
+
+    /* ================= ACTIVE FLAG ================= */
 
     isActive: {
       type: Boolean,
       default: true,
+      index: true,
     },
   },
   {
     timestamps: true,
+
+    /* include virtual fields */
+
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   },
@@ -65,24 +109,50 @@ const paperSchema = new mongoose.Schema(
 
 /* ================= INDEXES ================= */
 
-/* Text search */
 paperSchema.index({ title: "text", subject: "text" });
-
-/* Filter optimization */
-paperSchema.index({ subject: 1 });
-paperSchema.index({ semester: 1 });
-
-/* Popular papers query */
+paperSchema.index({ subject: 1, semester: 1 });
 paperSchema.index({ downloads: -1 });
 paperSchema.index({ views: -1 });
+paperSchema.index({ status: 1, isActive: 1 });
 
-/* ================= VIRTUAL FIELD ================= */
+/* ================= VIRTUAL FIELDS ================= */
+
+/* Popularity Score */
 
 paperSchema.virtual("popularityScore").get(function () {
-  return this.views + this.downloads * 2;
+  return this.views + this.downloads * 2 + this.ratings.length * 5;
 });
 
-/* ================= SAFE RESPONSE ================= */
+/* Average Rating */
+
+paperSchema.virtual("averageRating").get(function () {
+  if (!this.ratings || this.ratings.length === 0) return 0;
+
+  const sum = this.ratings.reduce((acc, r) => acc + r.value, 0);
+
+  return Number((sum / this.ratings.length).toFixed(1));
+});
+
+/* ================= METHODS ================= */
+
+/* Add / Update rating */
+
+paperSchema.methods.addOrUpdateRating = function (userId, rating) {
+  const existingRating = this.ratings.find(
+    (r) => r.user.toString() === userId.toString(),
+  );
+
+  if (existingRating) {
+    existingRating.value = rating;
+  } else {
+    this.ratings.push({
+      user: userId,
+      value: rating,
+    });
+  }
+};
+
+/* Safe response */
 
 paperSchema.methods.toSafeObject = function () {
   return {
@@ -93,8 +163,13 @@ paperSchema.methods.toSafeObject = function () {
     pdfLink: this.pdfLink,
     views: this.views,
     downloads: this.downloads,
+    averageRating: this.averageRating,
+    popularityScore: this.popularityScore,
+    status: this.status,
     createdAt: this.createdAt,
   };
 };
 
-export default mongoose.model("Paper", paperSchema);
+const Paper = mongoose.model("Paper", paperSchema);
+
+export default Paper;

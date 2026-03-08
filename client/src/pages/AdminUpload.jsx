@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useDropzone } from "react-dropzone";
 import { uploadPaper } from "../api/paper";
 
 const AdminUpload = () => {
+  const fileRef = useRef(null);
+
   const [form, setForm] = useState({
     title: "",
     subject: "",
@@ -12,9 +15,45 @@ const AdminUpload = () => {
 
   const [message, setMessage] = useState("");
   const [isError, setIsError] = useState(false);
-  const [loading, setLoading] = useState(false);
 
-  /* ================= Handle Submit ================= */
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  /* ================= DROPZONE ================= */
+
+  const { getRootProps, getInputProps } = useDropzone({
+    accept: {
+      "application/pdf": [],
+    },
+    multiple: false,
+    onDrop: (acceptedFiles) => {
+      const selected = acceptedFiles[0];
+
+      if (!selected) return;
+
+      /* FILE TYPE VALIDATION */
+
+      if (selected.type !== "application/pdf") {
+        setIsError(true);
+        setMessage("Only PDF files allowed");
+        return;
+      }
+
+      /* FILE SIZE VALIDATION */
+
+      if (selected.size > 10 * 1024 * 1024) {
+        setIsError(true);
+        setMessage("File size must be under 10MB");
+        return;
+      }
+
+      setFile(selected);
+      setIsError(false);
+      setMessage("");
+    },
+  });
+
+  /* ================= HANDLE SUBMIT ================= */
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -22,29 +61,50 @@ const AdminUpload = () => {
     setMessage("");
     setIsError(false);
 
+    if (!form.title.trim()) {
+      setIsError(true);
+      return setMessage("Title is required");
+    }
+
+    if (!form.subject) {
+      setIsError(true);
+      return setMessage("Please select subject");
+    }
+
+    if (!form.semester) {
+      setIsError(true);
+      return setMessage("Please select semester");
+    }
+
     if (!file) {
       setIsError(true);
       return setMessage("Please upload a PDF file");
     }
 
-    if (file.type !== "application/pdf") {
-      setIsError(true);
-      return setMessage("Only PDF files allowed");
-    }
-
     const data = new FormData();
 
-    data.append("title", form.title);
+    data.append("title", form.title.trim());
     data.append("subject", form.subject);
     data.append("semester", form.semester);
     data.append("pdf", file);
 
     setLoading(true);
+    setProgress(0);
 
     try {
-      await uploadPaper(data);
+      await uploadPaper(data, (progressEvent) => {
+        if (!progressEvent.total) return;
+
+        const percent = Math.round(
+          (progressEvent.loaded * 100) / progressEvent.total,
+        );
+
+        setProgress(percent);
+      });
 
       setMessage("✅ Paper uploaded successfully!");
+
+      /* RESET FORM */
 
       setForm({
         title: "",
@@ -53,9 +113,18 @@ const AdminUpload = () => {
       });
 
       setFile(null);
-    } catch {
+      setProgress(0);
+
+      if (fileRef.current) {
+        fileRef.current.value = "";
+      }
+    } catch (err) {
+      console.error(err);
+
       setIsError(true);
-      setMessage("Upload failed");
+      setMessage(
+        err.response?.data?.error || "Upload failed. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -68,7 +137,7 @@ const AdminUpload = () => {
           Upload Paper
         </h2>
 
-        {/* Message */}
+        {/* MESSAGE */}
 
         {message && (
           <div
@@ -80,9 +149,11 @@ const AdminUpload = () => {
           </div>
         )}
 
-        {/* Form */}
+        {/* FORM */}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* TITLE */}
+
           <input
             placeholder="Paper Title"
             value={form.title}
@@ -91,7 +162,7 @@ const AdminUpload = () => {
             className="input"
           />
 
-          {/* Subject */}
+          {/* SUBJECT */}
 
           <select
             value={form.subject}
@@ -110,7 +181,7 @@ const AdminUpload = () => {
             </option>
           </select>
 
-          {/* Semester */}
+          {/* SEMESTER */}
 
           <select
             value={form.semester}
@@ -129,16 +200,40 @@ const AdminUpload = () => {
             <option value="8">Semester 8</option>
           </select>
 
-          {/* File */}
+          {/* DRAG DROP PDF */}
 
-          <input
-            type="file"
-            accept="application/pdf"
-            onChange={(e) => setFile(e.target.files[0])}
-            className="w-full"
-          />
+          <div
+            {...getRootProps()}
+            className="border-2 border-dashed border-gray-300 p-6 text-center rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+          >
+            <input {...getInputProps()} />
 
-          {/* Button */}
+            {file ? (
+              <p className="text-green-600 font-medium">📄 {file.name}</p>
+            ) : (
+              <p className="text-gray-500">
+                Drag & Drop PDF here <br />
+                or click to select
+              </p>
+            )}
+          </div>
+
+          {/* PROGRESS BAR */}
+
+          {loading && (
+            <>
+              <div className="w-full bg-gray-200 rounded h-3">
+                <div
+                  className="bg-indigo-600 h-3 rounded transition-all duration-300"
+                  style={{ width: `${progress}%` }}
+                ></div>
+              </div>
+
+              <p className="text-sm text-gray-500">Uploading {progress}%</p>
+            </>
+          )}
+
+          {/* BUTTON */}
 
           <button
             disabled={loading}

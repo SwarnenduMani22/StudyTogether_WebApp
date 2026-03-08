@@ -3,19 +3,19 @@ import api from "../api/axios";
 
 const AuthContext = createContext();
 
-/* ================= Provider ================= */
+/* ================= PROVIDER ================= */
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  /* ================= Load Auth ================= */
+  /* ================= LOAD AUTH ================= */
 
   useEffect(() => {
     try {
-      const storedUser = localStorage.getItem("user");
-      const storedToken = localStorage.getItem("token");
+      const storedUser = sessionStorage.getItem("user");
+      const storedToken = sessionStorage.getItem("token");
 
       if (storedUser && storedToken) {
         const parsedUser = JSON.parse(storedUser);
@@ -27,53 +27,72 @@ export const AuthProvider = ({ children }) => {
       }
     } catch (error) {
       console.error("Auth load error:", error);
-    }
 
-    setLoading(false);
+      /* corrupted storage fix */
+
+      sessionStorage.removeItem("user");
+      sessionStorage.removeItem("token");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  /* ================= Login ================= */
+  /* ================= LOGIN ================= */
 
   const login = (userData, tokenData) => {
+    if (!userData || !tokenData) return;
+
     setUser(userData);
     setToken(tokenData);
 
-    localStorage.setItem("user", JSON.stringify(userData));
-    localStorage.setItem("token", tokenData);
+    sessionStorage.setItem("user", JSON.stringify(userData));
+    sessionStorage.setItem("token", tokenData);
 
     api.defaults.headers.common["Authorization"] = `Bearer ${tokenData}`;
   };
 
-  /* ================= Logout ================= */
+  /* ================= LOGOUT ================= */
 
   const logout = () => {
     setUser(null);
     setToken(null);
 
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
+    sessionStorage.removeItem("user");
+    sessionStorage.removeItem("token");
 
     delete api.defaults.headers.common["Authorization"];
+
+    window.location.href = "/login";
+  };
+
+  /* ================= CONTEXT VALUE ================= */
+
+  const value = {
+    user,
+    token,
+    loading,
+    login,
+    logout,
+    setUser,
+    isAuthenticated: !!user,
+    isAdmin: user?.role === "admin",
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        token,
-        login,
-        logout,
-        loading,
-        setUser,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {!loading && children}
     </AuthContext.Provider>
   );
 };
 
-/* ================= Hook ================= */
-
+/* ================= CUSTOM HOOK ================= */
+export { AuthContext };
 export const useAuth = () => {
-  return useContext(AuthContext);
+  const context = useContext(AuthContext);
+
+  if (!context) {
+    throw new Error("useAuth must be used inside AuthProvider");
+  }
+
+  return context;
 };

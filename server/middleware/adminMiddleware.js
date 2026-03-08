@@ -1,27 +1,34 @@
 const verifyAdmin = (req, res, next) => {
   try {
-    /* ================= CHECK USER ================= */
+    /* ================= AUTH CHECK ================= */
 
     if (!req.user) {
       return res.status(401).json({
-        error: "Unauthorized access",
+        success: false,
+        error: "Unauthorized. Please login first.",
       });
     }
 
-    /* ================= CHECK ROLE ================= */
+    /* ================= ROLE CHECK ================= */
 
-    if (req.user.role !== "admin") {
+    const { role } = req.user;
+
+    if (!role || role !== "admin") {
       return res.status(403).json({
-        error: "Access denied. Admin only.",
+        success: false,
+        error: "Access denied. Admin privileges required.",
       });
     }
 
-    next();
-  } catch (error) {
-    console.error("Admin middleware error:", error.message);
+    /* ================= NEXT ================= */
 
-    res.status(500).json({
-      error: "Server error",
+    return next();
+  } catch (error) {
+    console.error("❌ Admin middleware error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      error: "Internal server error",
     });
   }
 };

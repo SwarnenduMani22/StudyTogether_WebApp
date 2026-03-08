@@ -1,6 +1,8 @@
 import { useState } from "react";
-import api from "../api/axios";
 import { Link, useNavigate } from "react-router-dom";
+
+import api from "../api/axios";
+import toast from "react-hot-toast";
 
 const Register = () => {
   const navigate = useNavigate();
@@ -15,16 +17,18 @@ const Register = () => {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
-  /* ================= Handle Input ================= */
+  /* ================= HANDLE INPUT ================= */
 
   const handleChange = (e) => {
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
-  /* ================= Submit ================= */
+  /* ================= SUBMIT ================= */
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -39,9 +43,15 @@ const Register = () => {
     setLoading(true);
 
     try {
-      await api.post("/auth/register", form);
+      await api.post("/auth/register", {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        password: form.password,
+      });
 
-      setSuccess("✅ Registration successful! Redirecting...");
+      setSuccess("Registration successful! Redirecting...");
+
+      toast.success("Account created 🎉");
 
       setForm({
         name: "",
@@ -53,7 +63,12 @@ const Register = () => {
         navigate("/login");
       }, 1500);
     } catch (err) {
-      setError(err.response?.data?.error || "Registration failed");
+      const message =
+        err?.response?.data?.error || err?.message || "Registration failed";
+
+      setError(message);
+
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -61,46 +76,53 @@ const Register = () => {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center
+      className="
+      min-h-screen flex items-center justify-center
       bg-gradient-to-br
       from-purple-500 to-pink-600
       dark:from-gray-900 dark:to-gray-800
-      p-4"
+      p-4
+      "
     >
       <div
-        className="w-full max-w-md p-8 rounded-2xl shadow-xl
+        className="
+        w-full max-w-md p-8 rounded-2xl shadow-xl
         bg-white/90 dark:bg-gray-800/90
         backdrop-blur-md
         border border-gray-200 dark:border-gray-700
-        fade-in"
+        "
       >
         <h2 className="text-2xl font-bold text-center mb-6 text-gray-800 dark:text-white">
           Create Account 🚀
         </h2>
 
-        {/* Error */}
+        {/* ERROR */}
+
         {error && (
-          <div className="bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 text-sm p-2 rounded mb-4">
+          <div className="bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 text-sm p-3 rounded mb-4">
             {error}
           </div>
         )}
 
-        {/* Success */}
+        {/* SUCCESS */}
+
         {success && (
-          <div className="bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400 text-sm p-2 rounded mb-4">
+          <div className="bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400 text-sm p-3 rounded mb-4">
             {success}
           </div>
         )}
 
-        {/* Form */}
+        {/* FORM */}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <input
             name="name"
             value={form.name}
             required
             placeholder="Full Name"
-            className="input"
             onChange={handleChange}
+            disabled={loading}
+            className="input"
           />
 
           <input
@@ -109,8 +131,9 @@ const Register = () => {
             value={form.email}
             required
             placeholder="Email"
-            className="input"
             onChange={handleChange}
+            disabled={loading}
+            className="input"
           />
 
           <input
@@ -119,13 +142,15 @@ const Register = () => {
             value={form.password}
             required
             placeholder="Password"
-            className="input"
             onChange={handleChange}
+            disabled={loading}
+            className="input"
           />
 
           <button
+            type="submit"
             disabled={loading}
-            className={`btn-primary ${
+            className={`btn-primary w-full ${
               loading ? "opacity-60 cursor-not-allowed" : ""
             }`}
           >
@@ -133,7 +158,8 @@ const Register = () => {
           </button>
         </form>
 
-        {/* Login Link */}
+        {/* LOGIN LINK */}
+
         <p className="text-center mt-4 text-sm text-gray-600 dark:text-gray-400">
           Already have an account?{" "}
           <Link

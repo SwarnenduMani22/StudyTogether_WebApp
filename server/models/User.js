@@ -4,23 +4,25 @@ const userSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: true,
+      required: [true, "Name is required"],
       trim: true,
       minlength: 3,
+      maxlength: 50,
     },
 
     email: {
       type: String,
-      required: true,
-      unique: true,
+      required: [true, "Email is required"],
       lowercase: true,
       trim: true,
       match: [/^\S+@\S+\.\S+$/, "Please use a valid email address"],
+      unique: true,
+      index: true,
     },
 
     password: {
       type: String,
-      required: true,
+      required: [true, "Password is required"],
       minlength: 6,
       select: false,
     },
@@ -29,12 +31,34 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["user", "admin"],
       default: "user",
+      index: true,
     },
+
+    bookmarks: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Paper",
+      },
+    ],
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
+
+    toJSON: {
+      transform: function (doc, ret) {
+        delete ret.password;
+        delete ret.__v;
+        return ret;
+      },
+    },
+
+    toObject: {
+      transform: function (doc, ret) {
+        delete ret.password;
+        delete ret.__v;
+        return ret;
+      },
+    },
   },
 );
 
@@ -46,7 +70,13 @@ userSchema.methods.toSafeObject = function () {
     name: this.name,
     email: this.email,
     role: this.role,
+    bookmarks: this.bookmarks,
+    createdAt: this.createdAt,
   };
 };
 
-export default mongoose.model("User", userSchema);
+/* ================= MODEL ================= */
+
+const User = mongoose.model("User", userSchema);
+
+export default User;

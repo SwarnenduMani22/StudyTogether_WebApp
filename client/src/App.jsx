@@ -8,6 +8,13 @@ import {
   useNavigate,
 } from "react-router-dom";
 
+import { useState, useEffect, useRef } from "react";
+import { Toaster } from "react-hot-toast";
+
+import { useAuth } from "./context/AuthContext";
+
+/* ================= PAGES ================= */
+
 import Register from "./pages/Register";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -15,12 +22,19 @@ import Profile from "./pages/Profile";
 import Admin from "./pages/Admin";
 import Papers from "./pages/Papers";
 import AdminUpload from "./pages/AdminUpload";
+import AdminPending from "./pages/AdminPending";
+import PaperDetails from "./pages/PaperDetails";
 import Home from "./pages/Home";
+import MyPapers from "./pages/MyPapers";
+import Bookmarks from "./pages/Bookmarks";
+import UploadPaper from "./pages/UploadPaper";
 
-import { useState, useEffect, useRef } from "react";
-import { useAuth } from "./context/AuthContext";
+/* ================= COMPONENTS ================= */
 
-/* ================= SCROLL TO TOP ================= */
+import ErrorBoundary from "./components/common/ErrorBoundary";
+
+/* ================= SCROLL ================= */
+
 function ScrollToTop() {
   const { pathname } = useLocation();
 
@@ -31,23 +45,32 @@ function ScrollToTop() {
   return null;
 }
 
-/* ================= Protected Route ================= */
+/* ================= PROTECTED ROUTE ================= */
+
 function ProtectedRoute({ children }) {
-  const { token } = useAuth();
+  const { token, loading } = useAuth();
+
+  if (loading) return null;
+
   return token ? children : <Navigate to="/login" replace />;
 }
 
-/* ================= Admin Route ================= */
+/* ================= ADMIN ROUTE ================= */
+
 function AdminRoute({ children }) {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  if (loading) return null;
 
   if (!user) return <Navigate to="/login" replace />;
+
   if (user.role !== "admin") return <Navigate to="/dashboard" replace />;
 
   return children;
 }
 
-/* ================= Navbar ================= */
+/* ================= NAVBAR ================= */
+
 function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -58,249 +81,310 @@ function Navbar() {
   const [open, setOpen] = useState(false);
   const [mobileMenu, setMobileMenu] = useState(false);
 
-  const [darkMode, setDarkMode] = useState(
-    localStorage.getItem("theme") === "dark",
-  );
+  /* ================= DARK MODE ================= */
+
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem("theme");
+    if (saved) return saved === "dark";
+    return true;
+  });
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [darkMode]);
+
+  const toggleTheme = () => {
+    const next = !darkMode;
+
+    setDarkMode(next);
+
+    localStorage.setItem("theme", next ? "dark" : "light");
+  };
+
+  /* ================= LOGOUT ================= */
 
   const handleLogout = () => {
     logout();
     navigate("/login");
   };
 
-  const toggleTheme = () => {
-    if (darkMode) {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    } else {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    }
-
-    setDarkMode(!darkMode);
-  };
+  /* ================= CLOSE DROPDOWN ================= */
 
   useEffect(() => {
-    function handleClickOutside(e) {
+    const handleClick = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setOpen(false);
       }
-    }
+    };
 
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("mousedown", handleClick);
+
+    return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  useEffect(() => {
+    setMobileMenu(false);
+  }, [location.pathname]);
 
   const hideDashboardLink = ["/login", "/register"].includes(location.pathname);
 
   return (
-    <header className="sticky top-0 z-50 bg-white dark:bg-gray-900 max-w-6xl mx-auto flex items-center justify-between mb-8 p-4">
-      {/* Brand */}
-      {hideDashboardLink ? (
-        <Link to="/" className="brand">
+    <header className="sticky top-0 z-50 bg-white dark:bg-gray-900 shadow-sm">
+      <div className="max-w-6xl mx-auto flex items-center justify-between p-4">
+        {/* BRAND */}
+
+        <Link to={hideDashboardLink ? "/" : "/dashboard"} className="brand">
           StudyTogether
         </Link>
-      ) : (
-        <Link to="/dashboard" className="brand">
-          StudyTogether
-        </Link>
-      )}
 
-      {/* Mobile Menu Button */}
-      <button
-        className="md:hidden text-2xl"
-        onClick={() => setMobileMenu(!mobileMenu)}
-      >
-        ☰
-      </button>
+        {/* MOBILE BUTTON */}
 
-      {/* Desktop Menu */}
-      <nav className="hidden md:flex items-center space-x-4">
-        {!user ? (
-          <>
-            <Link to="/login" className="text-indigo-600">
-              Login
-            </Link>
+        <button
+          className="md:hidden text-2xl"
+          onClick={() => setMobileMenu(!mobileMenu)}
+        >
+          ☰
+        </button>
 
-            <Link to="/register" className="text-indigo-600">
-              Register
-            </Link>
-          </>
-        ) : (
-          <div className="flex items-center space-x-3">
-            {/* Theme Toggle */}
-            <button
-              onClick={toggleTheme}
-              className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-lg"
-            >
-              {darkMode ? "☀️" : "🌙"}
-            </button>
+        {/* DESKTOP NAV */}
 
-            {/* Profile Dropdown */}
-            <div ref={dropdownRef} className="relative">
+        <nav className="hidden md:flex items-center space-x-4">
+          {!user ? (
+            <>
+              <Link to="/login" className="text-indigo-600">
+                Login
+              </Link>
+
+              <Link to="/register" className="text-indigo-600">
+                Register
+              </Link>
+            </>
+          ) : (
+            <div className="flex items-center space-x-3">
+              {/* THEME */}
+
               <button
-                onClick={() => setOpen(!open)}
-                className="w-10 h-10 rounded-full bg-indigo-600 text-white"
+                onClick={toggleTheme}
+                className="w-10 h-10 bg-gray-200 dark:bg-gray-700 rounded-lg"
               >
-                {user?.name?.charAt(0)?.toUpperCase() || "U"}
+                {darkMode ? "☀️" : "🌙"}
               </button>
 
-              {open && (
-                <div className="absolute right-0 mt-2 w-44 bg-white dark:bg-gray-800 shadow-lg rounded-lg">
-                  {user?.role === "admin" && (
+              {/* PROFILE */}
+
+              <div ref={dropdownRef} className="relative">
+                <button
+                  onClick={() => setOpen(!open)}
+                  className="w-10 h-10 rounded-full bg-indigo-600 text-white"
+                >
+                  {user?.name?.charAt(0)?.toUpperCase() || "U"}
+                </button>
+
+                {open && (
+                  <div className="absolute right-0 mt-2 w-44 bg-white dark:bg-gray-800 shadow-lg rounded-lg">
                     <button
-                      onClick={() => navigate("/admin")}
-                      className="block w-full text-left px-4 py-2 text-indigo-600"
+                      onClick={() => navigate("/papers")}
+                      className="block w-full text-left px-4 py-2"
                     >
-                      Admin Panel
+                      Papers
                     </button>
-                  )}
 
-                  <button
-                    onClick={() => navigate("/papers")}
-                    className="block w-full text-left px-4 py-2"
-                  >
-                    Papers
-                  </button>
-
-                  {user?.role === "admin" && (
                     <button
-                      onClick={() => navigate("/upload")}
+                      onClick={() => navigate("/my-papers")}
+                      className="block w-full text-left px-4 py-2"
+                    >
+                      My Papers
+                    </button>
+
+                    <button
+                      onClick={() => navigate("/upload-paper")}
                       className="block w-full text-left px-4 py-2"
                     >
                       Upload Paper
                     </button>
-                  )}
 
-                  <button
-                    onClick={() => navigate("/profile")}
-                    className="block w-full text-left px-4 py-2"
-                  >
-                    Profile
-                  </button>
+                    <button
+                      onClick={() => navigate("/bookmarks")}
+                      className="block w-full text-left px-4 py-2"
+                    >
+                      Bookmarks
+                    </button>
 
-                  <button
-                    onClick={handleLogout}
-                    className="block w-full text-left px-4 py-2 text-red-500"
-                  >
-                    Logout
-                  </button>
-                </div>
-              )}
+                    <button
+                      onClick={() => navigate("/profile")}
+                      className="block w-full text-left px-4 py-2"
+                    >
+                      Profile
+                    </button>
+
+                    {user?.role === "admin" && (
+                      <>
+                        <button
+                          onClick={() => navigate("/admin")}
+                          className="block w-full text-left px-4 py-2 text-indigo-600"
+                        >
+                          Admin Panel
+                        </button>
+
+                        <button
+                          onClick={() => navigate("/admin/pending")}
+                          className="block w-full text-left px-4 py-2"
+                        >
+                          Pending Papers
+                        </button>
+
+                        <button
+                          onClick={() => navigate("/upload")}
+                          className="block w-full text-left px-4 py-2"
+                        >
+                          Admin Upload
+                        </button>
+                      </>
+                    )}
+
+                    <button
+                      onClick={handleLogout}
+                      className="block w-full text-left px-4 py-2 text-red-500"
+                    >
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-      </nav>
-
-      {/* Mobile Menu */}
-      {mobileMenu && user && (
-        <div className="absolute top-16 right-4 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 md:hidden space-y-3">
-          <button
-            onClick={() => navigate("/papers")}
-            className="block w-full text-left"
-          >
-            Papers
-          </button>
-
-          <button
-            onClick={() => navigate("/profile")}
-            className="block w-full text-left"
-          >
-            Profile
-          </button>
-
-          {user.role === "admin" && (
-            <>
-              <button
-                onClick={() => navigate("/admin")}
-                className="block w-full text-left"
-              >
-                Admin Panel
-              </button>
-
-              <button
-                onClick={() => navigate("/upload")}
-                className="block w-full text-left"
-              >
-                Upload Paper
-              </button>
-            </>
           )}
-
-          <button
-            onClick={handleLogout}
-            className="block w-full text-left text-red-500"
-          >
-            Logout
-          </button>
-        </div>
-      )}
+        </nav>
+      </div>
     </header>
   );
 }
 
 /* ================= APP ================= */
+
 export default function App() {
   return (
-    <BrowserRouter>
-      <ScrollToTop />
+    <ErrorBoundary>
+      <BrowserRouter>
+        <ScrollToTop />
 
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
-        <Navbar />
+        <Toaster position="top-right" />
 
-        <main className="max-w-6xl mx-auto">
-          <Routes>
-            <Route path="/" element={<Home />} />
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+          <Navbar />
 
-            <Route path="/register" element={<Register />} />
-            <Route path="/login" element={<Login />} />
+          <main className="max-w-6xl mx-auto p-6">
+            <Routes>
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <Home />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              }
-            />
+              <Route path="/register" element={<Register />} />
+              <Route path="/login" element={<Login />} />
 
-            <Route
-              path="/profile"
-              element={
-                <ProtectedRoute>
-                  <Profile />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <Dashboard />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/papers"
-              element={
-                <ProtectedRoute>
-                  <Papers />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
+                    <Profile />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/admin"
-              element={
-                <AdminRoute>
-                  <Admin />
-                </AdminRoute>
-              }
-            />
+              <Route
+                path="/papers"
+                element={
+                  <ProtectedRoute>
+                    <Papers />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/upload"
-              element={
-                <AdminRoute>
-                  <AdminUpload />
-                </AdminRoute>
-              }
-            />
-          </Routes>
-        </main>
-      </div>
-    </BrowserRouter>
+              <Route
+                path="/my-papers"
+                element={
+                  <ProtectedRoute>
+                    <MyPapers />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/upload-paper"
+                element={
+                  <ProtectedRoute>
+                    <UploadPaper />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/bookmarks"
+                element={
+                  <ProtectedRoute>
+                    <Bookmarks />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/papers/:id"
+                element={
+                  <ProtectedRoute>
+                    <PaperDetails />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/admin"
+                element={
+                  <AdminRoute>
+                    <Admin />
+                  </AdminRoute>
+                }
+              />
+
+              <Route
+                path="/admin/pending"
+                element={
+                  <AdminRoute>
+                    <AdminPending />
+                  </AdminRoute>
+                }
+              />
+
+              <Route
+                path="/upload"
+                element={
+                  <AdminRoute>
+                    <AdminUpload />
+                  </AdminRoute>
+                }
+              />
+
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </main>
+        </div>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }

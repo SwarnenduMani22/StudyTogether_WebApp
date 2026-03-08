@@ -5,13 +5,15 @@ import User from "../models/User.js";
 
 const router = express.Router();
 
-/* ================= REGISTER ================= */
+/* =================================================
+REGISTER
+================================================= */
 
 router.post("/register", async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    let { name, email, password } = req.body;
 
-    /* ---- Validation ---- */
+    /* ---------- VALIDATION ---------- */
 
     if (!name || !email || !password) {
       return res.status(400).json({
@@ -19,7 +21,10 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    if (name.trim().length < 3) {
+    name = name.trim();
+    email = email.trim().toLowerCase();
+
+    if (name.length < 3) {
       return res.status(400).json({
         error: "Name must be at least 3 characters",
       });
@@ -31,36 +36,44 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    /* ---- Check existing user ---- */
+    const emailRegex = /^\S+@\S+\.\S+$/;
 
-    const existingUser = await User.findOne({
-      email: email.toLowerCase(),
-    });
-
-    if (existingUser) {
+    if (!emailRegex.test(email)) {
       return res.status(400).json({
-        error: "Email already exists",
+        error: "Invalid email format",
       });
     }
 
-    /* ---- Hash password ---- */
+    /* ---------- CHECK EXISTING USER ---------- */
+
+    const existingUser = await User.findOne({ email });
+
+    if (existingUser) {
+      return res.status(400).json({
+        error: "Email already registered",
+      });
+    }
+
+    /* ---------- HASH PASSWORD ---------- */
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    /* ---- Create user ---- */
+    /* ---------- CREATE USER ---------- */
 
     const user = await User.create({
-      name: name.trim(),
-      email: email.toLowerCase(),
+      name,
+      email,
       password: hashedPassword,
     });
+
+    /* ---------- RESPONSE ---------- */
 
     res.status(201).json({
       message: "User registered successfully",
       user: user.toSafeObject(),
     });
   } catch (error) {
-    console.error("Register error:", error.message);
+    console.error("❌ Register error:", error);
 
     res.status(500).json({
       error: "Server error during registration",
@@ -68,13 +81,15 @@ router.post("/register", async (req, res) => {
   }
 });
 
-/* ================= LOGIN ================= */
+/* =================================================
+LOGIN
+================================================= */
 
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    let { email, password } = req.body;
 
-    /* ---- Validation ---- */
+    /* ---------- VALIDATION ---------- */
 
     if (!email || !password) {
       return res.status(400).json({
@@ -82,11 +97,11 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    /* ---- Find user (include password) ---- */
+    email = email.trim().toLowerCase();
 
-    const user = await User.findOne({
-      email: email.toLowerCase(),
-    }).select("+password");
+    /* ---------- FIND USER (INCLUDE PASSWORD) ---------- */
+
+    const user = await User.findOne({ email }).select("+password");
 
     if (!user) {
       return res.status(400).json({
@@ -94,7 +109,7 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    /* ---- Compare password ---- */
+    /* ---------- PASSWORD CHECK ---------- */
 
     const isMatch = await bcrypt.compare(password, user.password);
 
@@ -104,7 +119,7 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    /* ---- Generate JWT Token ---- */
+    /* ---------- GENERATE JWT TOKEN ---------- */
 
     const token = jwt.sign(
       {
@@ -117,7 +132,7 @@ router.post("/login", async (req, res) => {
       },
     );
 
-    /* ---- Response ---- */
+    /* ---------- RESPONSE ---------- */
 
     res.json({
       message: "Login successful",
@@ -125,7 +140,7 @@ router.post("/login", async (req, res) => {
       user: user.toSafeObject(),
     });
   } catch (error) {
-    console.error("Login error:", error.message);
+    console.error("❌ Login error:", error);
 
     res.status(500).json({
       error: "Server error during login",

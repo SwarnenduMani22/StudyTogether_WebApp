@@ -1,25 +1,68 @@
 import multer from "multer";
-import { CloudinaryStorage } from "multer-storage-cloudinary";
-import cloudinary from "../config/cloudinary.js";
+import fs from "fs";
+import path from "path";
+import crypto from "crypto";
 
-/* ================= CLOUDINARY STORAGE ================= */
+/* ================= UPLOAD DIRECTORY ================= */
 
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: "study_papers",
-    resource_type: "raw",
-    format: "pdf", // force pdf
+const uploadDir = path.join(process.cwd(), "uploads");
+
+/* Ensure uploads directory exists */
+
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+/* ================= STORAGE CONFIG ================= */
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+
+  filename: (req, file, cb) => {
+    try {
+      const ext = path.extname(file.originalname).toLowerCase();
+
+      /* sanitize original filename */
+
+      const baseName = path
+        .basename(file.originalname, ext)
+        .replace(/\s+/g, "_")
+        .replace(/[^\w.-]/g, "")
+        .toLowerCase();
+
+      /* generate random id */
+
+      const randomId = crypto.randomBytes(6).toString("hex");
+
+      const filename = `${Date.now()}_${randomId}_${baseName}${ext}`;
+
+      cb(null, filename);
+    } catch (error) {
+      cb(error);
+    }
   },
 });
 
 /* ================= FILE FILTER ================= */
 
 const fileFilter = (req, file, cb) => {
-  if (file.mimetype === "application/pdf") {
+  try {
+    if (!file || !file.mimetype) {
+      return cb(new Error("Invalid file upload"), false);
+    }
+
+    const allowedMimeTypes = ["application/pdf"];
+    const ext = path.extname(file.originalname).toLowerCase();
+
+    if (!allowedMimeTypes.includes(file.mimetype) || ext !== ".pdf") {
+      return cb(new Error("Only PDF files are allowed"), false);
+    }
+
     cb(null, true);
-  } else {
-    cb(new Error("Only PDF files are allowed"), false);
+  } catch (error) {
+    cb(error, false);
   }
 };
 
@@ -27,9 +70,11 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({
   storage,
+
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB limit
   },
+
   fileFilter,
 });
 

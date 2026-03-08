@@ -1,9 +1,13 @@
 import axios from "axios";
 
-/* ================= API INSTANCE ================= */
+/* ================= BASE URL ================= */
+
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
+
+/* ================= AXIOS INSTANCE ================= */
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1",
+  baseURL: BASE_URL,
   timeout: 10000,
   headers: {
     "Content-Type": "application/json",
@@ -14,13 +18,18 @@ const api = axios.create({
 
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token");
+    try {
+      const token = sessionStorage.getItem("token");
 
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+
+      return config;
+    } catch (error) {
+      console.error("Request interceptor error:", error);
+      return config;
     }
-
-    return config;
   },
   (error) => Promise.reject(error),
 );
@@ -32,29 +41,40 @@ api.interceptors.response.use(
 
   (error) => {
     const status = error.response?.status;
+    const message =
+      error.response?.data?.error ||
+      error.response?.data?.message ||
+      error.message ||
+      "Unknown error";
 
-    /* Unauthorized → logout */
+    /* ================= UNAUTHORIZED ================= */
 
     if (status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
+      sessionStorage.removeItem("token");
+      sessionStorage.removeItem("user");
 
-      window.location.replace("/login");
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
     }
 
-    /* Server error */
+    /* ================= SERVER ERROR ================= */
 
     if (status === 500) {
-      console.error("Server error occurred");
+      console.error("Server error:", message);
     }
 
-    /* Network error */
+    /* ================= NETWORK ERROR ================= */
 
     if (!error.response) {
       console.error("Network error: backend may be offline");
     }
 
-    return Promise.reject(error);
+    return Promise.reject({
+      status,
+      message,
+      original: error,
+    });
   },
 );
 
