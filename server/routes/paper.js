@@ -25,7 +25,7 @@ router.post("/upload", verifyToken, upload.single("pdf"), async (req, res) => {
       });
     }
 
-    /* ================= USER UPLOAD LIMIT ================= */
+    /* USER LIMIT (ONLY FOR USERS) */
 
     if (req.user.role !== "admin") {
       const activeUploads = await Paper.countDocuments({
@@ -40,7 +40,7 @@ router.post("/upload", verifyToken, upload.single("pdf"), async (req, res) => {
       }
     }
 
-    /* ================= CHECK DUPLICATE ================= */
+    /* DUPLICATE CHECK */
 
     const existingPaper = await Paper.findOne({
       title: title.trim(),
@@ -58,7 +58,7 @@ router.post("/upload", verifyToken, upload.single("pdf"), async (req, res) => {
 
     const pdfLink = `${req.protocol}://${req.get("host")}/uploads/${filename}`;
 
-    /* ================= ADMIN AUTO APPROVE ================= */
+    /* ADMIN AUTO APPROVE */
 
     const status = req.user.role === "admin" ? "approved" : "pending";
 
@@ -80,7 +80,7 @@ router.post("/upload", verifyToken, upload.single("pdf"), async (req, res) => {
       paper,
     });
   } catch (error) {
-    console.error("Upload paper error:", error.message);
+    console.error("Upload paper error:", error);
 
     res.status(500).json({
       error: "Server error while uploading paper",
@@ -89,7 +89,7 @@ router.post("/upload", verifyToken, upload.single("pdf"), async (req, res) => {
 });
 
 /* =====================================================
-GET PAPERS (SEARCH + FILTER)
+GET PAPERS (SEARCH + FILTER + PAGINATION)
 ===================================================== */
 
 router.get("/", verifyToken, async (req, res) => {
@@ -110,6 +110,8 @@ router.get("/", verifyToken, async (req, res) => {
       status: "approved",
     };
 
+    /* SEARCH */
+
     if (search) {
       filter.$or = [
         { title: { $regex: search, $options: "i" } },
@@ -118,7 +120,10 @@ router.get("/", verifyToken, async (req, res) => {
     }
 
     if (subject) filter.subject = subject;
+
     if (semester) filter.semester = Number(semester);
+
+    /* SORT */
 
     let sortOption = { createdAt: -1 };
 
@@ -159,7 +164,9 @@ router.get("/admin/pending", verifyToken, verifyAdmin, async (req, res) => {
       .sort({ createdAt: -1 });
 
     res.json(papers);
-  } catch {
+  } catch (error) {
+    console.error("Pending papers error:", error);
+
     res.status(500).json({
       error: "Failed to fetch pending papers",
     });
@@ -192,7 +199,9 @@ router.put("/admin/approve/:id", verifyToken, verifyAdmin, async (req, res) => {
       message: "Paper approved successfully",
       paper,
     });
-  } catch {
+  } catch (error) {
+    console.error("Approve paper error:", error);
+
     res.status(500).json({
       error: "Approval failed",
     });
@@ -217,6 +226,8 @@ router.delete(
         });
       }
 
+      /* DELETE FILE */
+
       if (paper.pdfLink) {
         const filename = paper.pdfLink.split("/uploads/")[1];
 
@@ -232,7 +243,9 @@ router.delete(
       res.json({
         message: "Paper rejected and deleted",
       });
-    } catch {
+    } catch (error) {
+      console.error("Reject paper error:", error);
+
       res.status(500).json({
         error: "Reject failed",
       });
@@ -255,7 +268,9 @@ router.get("/trending", async (req, res) => {
       .populate("uploadedBy", "name");
 
     res.json(papers);
-  } catch {
+  } catch (error) {
+    console.error("Trending error:", error);
+
     res.status(500).json({
       error: "Failed to fetch trending papers",
     });
@@ -273,7 +288,9 @@ router.post("/:id/view", verifyToken, async (req, res) => {
     });
 
     res.json({ message: "View counted" });
-  } catch {
+  } catch (error) {
+    console.error("View counter error:", error);
+
     res.status(500).json({
       error: "Failed to count view",
     });
@@ -291,7 +308,9 @@ router.post("/:id/download", verifyToken, async (req, res) => {
     });
 
     res.json({ message: "Download counted" });
-  } catch {
+  } catch (error) {
+    console.error("Download counter error:", error);
+
     res.status(500).json({
       error: "Failed to count download",
     });
@@ -325,7 +344,9 @@ router.post("/:id/rate", verifyToken, async (req, res) => {
     await paper.save();
 
     res.json({ message: "Rating submitted" });
-  } catch {
+  } catch (error) {
+    console.error("Rating error:", error);
+
     res.status(500).json({
       error: "Rating failed",
     });
@@ -361,7 +382,9 @@ router.delete("/:id", verifyToken, verifyAdmin, async (req, res) => {
     res.json({
       message: "Paper deleted successfully",
     });
-  } catch {
+  } catch (error) {
+    console.error("Delete paper error:", error);
+
     res.status(500).json({
       error: "Server error while deleting paper",
     });

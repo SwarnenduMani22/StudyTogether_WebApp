@@ -21,7 +21,6 @@ import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
 import Admin from "./pages/Admin";
 import Papers from "./pages/Papers";
-import AdminUpload from "./pages/AdminUpload";
 import AdminPending from "./pages/AdminPending";
 import PaperDetails from "./pages/PaperDetails";
 import Home from "./pages/Home";
@@ -187,6 +186,12 @@ function Navbar() {
                 {open && (
                   <div className="absolute right-0 mt-2 w-44 bg-white dark:bg-gray-800 shadow-lg rounded-lg">
                     <button
+                      onClick={() => navigate("/profile")}
+                      className="block w-full text-left px-4 py-2"
+                    >
+                      Profile
+                    </button>
+                    <button
                       onClick={() => navigate("/papers")}
                       className="block w-full text-left px-4 py-2"
                     >
@@ -207,19 +212,18 @@ function Navbar() {
                       Upload Paper
                     </button>
 
-                    <button
-                      onClick={() => navigate("/bookmarks")}
-                      className="block w-full text-left px-4 py-2"
-                    >
-                      Bookmarks
-                    </button>
+                    {/* USER ONLY */}
 
-                    <button
-                      onClick={() => navigate("/profile")}
-                      className="block w-full text-left px-4 py-2"
-                    >
-                      Profile
-                    </button>
+                    {user?.role !== "admin" && (
+                      <button
+                        onClick={() => navigate("/bookmarks")}
+                        className="block w-full text-left px-4 py-2"
+                      >
+                        Bookmarks
+                      </button>
+                    )}
+
+                    {/* ADMIN ONLY */}
 
                     {user?.role === "admin" && (
                       <>
@@ -235,13 +239,6 @@ function Navbar() {
                           className="block w-full text-left px-4 py-2"
                         >
                           Pending Papers
-                        </button>
-
-                        <button
-                          onClick={() => navigate("/upload")}
-                          className="block w-full text-left px-4 py-2"
-                        >
-                          Admin Upload
                         </button>
                       </>
                     )}
@@ -367,15 +364,6 @@ export default function App() {
                 element={
                   <AdminRoute>
                     <AdminPending />
-                  </AdminRoute>
-                }
-              />
-
-              <Route
-                path="/upload"
-                element={
-                  <AdminRoute>
-                    <AdminUpload />
                   </AdminRoute>
                 }
               />

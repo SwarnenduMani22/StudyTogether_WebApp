@@ -1,9 +1,12 @@
 import { useState, useEffect } from "react";
 import { uploadPaper } from "../api/paper";
 import api from "../api/axios";
+import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
 
 const UploadPaper = () => {
+  const { user } = useAuth();
+
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState("");
   const [semester, setSemester] = useState("");
@@ -41,7 +44,9 @@ const UploadPaper = () => {
           total,
         });
 
-        if (total >= 2) {
+        /* Admin unlimited */
+
+        if (user?.role !== "admin" && total >= 2) {
           setLimitReached(true);
         }
       } catch (error) {
@@ -50,19 +55,19 @@ const UploadPaper = () => {
     };
 
     loadUserStats();
-  }, []);
+  }, [user]);
 
   /* ================= SUBMIT ================= */
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (limitReached) {
-      return toast.error("Upload limit reached (max 2 papers)");
-    }
-
     if (!file) {
       return toast.error("PDF required");
+    }
+
+    if (limitReached && user?.role !== "admin") {
+      return toast.error("Upload limit reached (max 2 papers)");
     }
 
     const formData = new FormData();
@@ -77,12 +82,30 @@ const UploadPaper = () => {
 
       await uploadPaper(formData);
 
-      toast.success("Paper uploaded for admin approval");
+      /* success message */
+
+      if (user?.role === "admin") {
+        toast.success("Paper uploaded successfully ✅");
+      } else {
+        toast.success("Paper uploaded for admin approval ⏳");
+      }
+
+      /* reset */
 
       setTitle("");
       setSubject("");
       setSemester("");
       setFile(null);
+
+      /* refresh stats */
+
+      if (user?.role !== "admin") {
+        setStats((prev) => ({
+          ...prev,
+          pending: prev.pending + 1,
+          total: prev.total + 1,
+        }));
+      }
     } catch (err) {
       toast.error(err?.response?.data?.error || "Upload failed");
     } finally {
@@ -93,21 +116,33 @@ const UploadPaper = () => {
   return (
     <div className="min-h-screen p-8">
       <div className="max-w-xl mx-auto card">
-        <h2 className="text-2xl font-bold mb-6">Upload Paper</h2>
+        {/* TITLE */}
+
+        <h2 className="text-2xl font-bold mb-2">
+          {user?.role === "admin" ? "Admin Upload Paper" : "Upload Paper"}
+        </h2>
+
+        <p className="text-gray-500 text-sm mb-6">
+          {user?.role === "admin"
+            ? "Admin uploads are instantly approved."
+            : "Your upload will be reviewed by admin."}
+        </p>
 
         {/* USER UPLOAD STATUS */}
 
-        <div className="flex gap-4 text-sm mb-6">
-          <span className="text-green-500">Approved: {stats.approved}</span>
+        {user?.role !== "admin" && (
+          <div className="flex gap-4 text-sm mb-6">
+            <span className="text-green-500">Approved: {stats.approved}</span>
 
-          <span className="text-yellow-500">Pending: {stats.pending}</span>
+            <span className="text-yellow-500">Pending: {stats.pending}</span>
 
-          <span>Used: {stats.total} / 2</span>
-        </div>
+            <span>Used: {stats.total} / 2</span>
+          </div>
+        )}
 
         {/* LIMIT WARNING */}
 
-        {limitReached && (
+        {limitReached && user?.role !== "admin" && (
           <div className="bg-red-100 text-red-600 p-3 rounded mb-6">
             Upload limit reached (Max 2 papers)
           </div>
@@ -118,10 +153,10 @@ const UploadPaper = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <input
             className="input"
-            placeholder="Title"
+            placeholder="Paper Title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            disabled={limitReached}
+            disabled={limitReached && user?.role !== "admin"}
           />
 
           <input
@@ -129,7 +164,7 @@ const UploadPaper = () => {
             placeholder="Subject"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            disabled={limitReached}
+            disabled={limitReached && user?.role !== "admin"}
           />
 
           <input
@@ -137,21 +172,25 @@ const UploadPaper = () => {
             placeholder="Semester"
             value={semester}
             onChange={(e) => setSemester(e.target.value)}
-            disabled={limitReached}
+            disabled={limitReached && user?.role !== "admin"}
           />
 
           <input
             type="file"
             accept="application/pdf"
             onChange={(e) => setFile(e.target.files[0])}
-            disabled={limitReached}
+            disabled={limitReached && user?.role !== "admin"}
           />
 
           <button
-            disabled={loading || limitReached}
+            disabled={loading || (limitReached && user?.role !== "admin")}
             className="btn-primary w-full"
           >
-            {loading ? "Uploading..." : "Upload Paper"}
+            {loading
+              ? "Uploading..."
+              : user?.role === "admin"
+                ? "Upload Paper"
+                : "Submit for Approval"}
           </button>
         </form>
       </div>
