@@ -44,8 +44,6 @@ const UploadPaper = () => {
           total,
         });
 
-        /* Admin unlimited */
-
         if (user?.role !== "admin" && total >= 2) {
           setLimitReached(true);
         }
@@ -61,6 +59,18 @@ const UploadPaper = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!title.trim()) {
+      return toast.error("Title required");
+    }
+
+    if (!subject) {
+      return toast.error("Select subject");
+    }
+
+    if (!semester) {
+      return toast.error("Select semester");
+    }
 
     if (!file) {
       return toast.error("PDF required");
@@ -82,22 +92,20 @@ const UploadPaper = () => {
 
       await uploadPaper(formData);
 
-      /* success message */
-
       if (user?.role === "admin") {
         toast.success("Paper uploaded successfully ✅");
       } else {
-        toast.success("Paper uploaded for admin approval ⏳");
+        toast.success("Paper submitted for admin approval ⏳");
       }
 
-      /* reset */
+      /* reset form */
 
       setTitle("");
       setSubject("");
       setSemester("");
       setFile(null);
 
-      /* refresh stats */
+      /* update stats */
 
       if (user?.role !== "admin") {
         setStats((prev) => ({
@@ -107,8 +115,13 @@ const UploadPaper = () => {
         }));
       }
     } catch (err) {
-      toast.error(err?.response?.data?.error || "Upload failed");
-    } finally {
+      const message = err?.response?.data?.error;
+
+      if (message) {
+        toast.error(message);
+      } else {
+        toast.error("Upload failed. Try again.");
+      }
       setLoading(false);
     }
   };
@@ -128,14 +141,12 @@ const UploadPaper = () => {
             : "Your upload will be reviewed by admin."}
         </p>
 
-        {/* USER UPLOAD STATUS */}
+        {/* USER STATS */}
 
         {user?.role !== "admin" && (
           <div className="flex gap-4 text-sm mb-6">
             <span className="text-green-500">Approved: {stats.approved}</span>
-
             <span className="text-yellow-500">Pending: {stats.pending}</span>
-
             <span>Used: {stats.total} / 2</span>
           </div>
         )}
@@ -151,6 +162,8 @@ const UploadPaper = () => {
         {/* FORM */}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* TITLE */}
+
           <input
             className="input"
             placeholder="Paper Title"
@@ -159,21 +172,45 @@ const UploadPaper = () => {
             disabled={limitReached && user?.role !== "admin"}
           />
 
-          <input
+          {/* SUBJECT */}
+
+          <select
             className="input"
-            placeholder="Subject"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
             disabled={limitReached && user?.role !== "admin"}
-          />
+          >
+            <option value="">Select Subject</option>
+            <option value="Data Structure">Data Structure</option>
+            <option value="Operating System">Operating System</option>
+            <option value="DBMS">DBMS</option>
+            <option value="Computer Network">Computer Network</option>
+            <option value="Software Engineering">Software Engineering</option>
+            <option value="Artificial Intelligence">
+              Artificial Intelligence
+            </option>
+          </select>
 
-          <input
+          {/* SEMESTER */}
+
+          <select
             className="input"
-            placeholder="Semester"
             value={semester}
             onChange={(e) => setSemester(e.target.value)}
             disabled={limitReached && user?.role !== "admin"}
-          />
+          >
+            <option value="">Select Semester</option>
+            <option value="1">Semester 1</option>
+            <option value="2">Semester 2</option>
+            <option value="3">Semester 3</option>
+            <option value="4">Semester 4</option>
+            <option value="5">Semester 5</option>
+            <option value="6">Semester 6</option>
+            <option value="7">Semester 7</option>
+            <option value="8">Semester 8</option>
+          </select>
+
+          {/* FILE */}
 
           <input
             type="file"
@@ -181,6 +218,8 @@ const UploadPaper = () => {
             onChange={(e) => setFile(e.target.files[0])}
             disabled={limitReached && user?.role !== "admin"}
           />
+
+          {/* BUTTON */}
 
           <button
             disabled={loading || (limitReached && user?.role !== "admin")}

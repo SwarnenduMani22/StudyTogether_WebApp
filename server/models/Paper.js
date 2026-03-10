@@ -72,22 +72,24 @@ const paperSchema = new mongoose.Schema(
 
     /* ================= RATINGS ================= */
 
-    ratings: [
-      {
-        user: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
-          required: true,
+    ratings: {
+      type: [
+        {
+          user: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            required: true,
+          },
+          value: {
+            type: Number,
+            required: true,
+            min: 1,
+            max: 5,
+          },
         },
-
-        value: {
-          type: Number,
-          required: true,
-          min: 1,
-          max: 5,
-        },
-      },
-    ],
+      ],
+      default: [],
+    },
 
     /* ================= ACTIVE FLAG ================= */
 
@@ -97,11 +99,9 @@ const paperSchema = new mongoose.Schema(
       index: true,
     },
   },
+
   {
     timestamps: true,
-
-    /* include virtual fields */
-
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   },
@@ -110,9 +110,13 @@ const paperSchema = new mongoose.Schema(
 /* ================= INDEXES ================= */
 
 paperSchema.index({ title: "text", subject: "text" });
+
 paperSchema.index({ subject: 1, semester: 1 });
+
 paperSchema.index({ downloads: -1 });
+
 paperSchema.index({ views: -1 });
+
 paperSchema.index({ status: 1, isActive: 1 });
 
 /* ================= VIRTUAL FIELDS ================= */
@@ -120,7 +124,9 @@ paperSchema.index({ status: 1, isActive: 1 });
 /* Popularity Score */
 
 paperSchema.virtual("popularityScore").get(function () {
-  return this.views + this.downloads * 2 + this.ratings.length * 5;
+  const ratingScore = this.ratings?.length || 0;
+
+  return this.views + this.downloads * 2 + ratingScore * 5;
 });
 
 /* Average Rating */
@@ -152,7 +158,7 @@ paperSchema.methods.addOrUpdateRating = function (userId, rating) {
   }
 };
 
-/* Safe response */
+/* Safe API response */
 
 paperSchema.methods.toSafeObject = function () {
   return {

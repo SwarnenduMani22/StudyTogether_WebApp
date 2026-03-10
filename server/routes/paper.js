@@ -17,7 +17,7 @@ UPLOAD PAPER (ADMIN + USER)
 
 router.post("/upload", verifyToken, upload.single("pdf"), async (req, res) => {
   try {
-    const { title, subject, semester } = req.body;
+    let { title, subject, semester } = req.body;
 
     if (!title || !subject || !semester || !req.file) {
       return res.status(400).json({
@@ -25,7 +25,22 @@ router.post("/upload", verifyToken, upload.single("pdf"), async (req, res) => {
       });
     }
 
-    /* USER LIMIT (ONLY FOR USERS) */
+    /* ================= SUBJECT NORMALIZATION ================= */
+
+    subject = subject.trim().toLowerCase();
+
+    const subjectMap = {
+      dbms: "DBMS",
+      "data structure": "Data Structure",
+      "operating system": "Operating System",
+      "computer network": "Computer Network",
+      "software engineering": "Software Engineering",
+      "artificial intelligence": "Artificial Intelligence",
+    };
+
+    subject = subjectMap[subject] || subject;
+
+    /* ================= USER LIMIT ================= */
 
     if (req.user.role !== "admin") {
       const activeUploads = await Paper.countDocuments({
@@ -40,7 +55,7 @@ router.post("/upload", verifyToken, upload.single("pdf"), async (req, res) => {
       }
     }
 
-    /* DUPLICATE CHECK */
+    /* ================= DUPLICATE CHECK ================= */
 
     const existingPaper = await Paper.findOne({
       title: title.trim(),
@@ -58,7 +73,7 @@ router.post("/upload", verifyToken, upload.single("pdf"), async (req, res) => {
 
     const pdfLink = `${req.protocol}://${req.get("host")}/uploads/${filename}`;
 
-    /* ADMIN AUTO APPROVE */
+    /* ================= ADMIN AUTO APPROVE ================= */
 
     const status = req.user.role === "admin" ? "approved" : "pending";
 
@@ -110,8 +125,6 @@ router.get("/", verifyToken, async (req, res) => {
       status: "approved",
     };
 
-    /* SEARCH */
-
     if (search) {
       filter.$or = [
         { title: { $regex: search, $options: "i" } },
@@ -122,8 +135,6 @@ router.get("/", verifyToken, async (req, res) => {
     if (subject) filter.subject = subject;
 
     if (semester) filter.semester = Number(semester);
-
-    /* SORT */
 
     let sortOption = { createdAt: -1 };
 
@@ -189,12 +200,6 @@ router.put("/admin/approve/:id", verifyToken, verifyAdmin, async (req, res) => {
       { new: true },
     );
 
-    if (!paper) {
-      return res.status(404).json({
-        error: "Paper not found",
-      });
-    }
-
     res.json({
       message: "Paper approved successfully",
       paper,
@@ -226,11 +231,8 @@ router.delete(
         });
       }
 
-      /* DELETE FILE */
-
       if (paper.pdfLink) {
         const filename = paper.pdfLink.split("/uploads/")[1];
-
         const filePath = path.join(process.cwd(), "uploads", filename);
 
         if (fs.existsSync(filePath)) {
@@ -333,12 +335,6 @@ router.post("/:id/rate", verifyToken, async (req, res) => {
 
     const paper = await Paper.findById(req.params.id);
 
-    if (!paper) {
-      return res.status(404).json({
-        error: "Paper not found",
-      });
-    }
-
     paper.addOrUpdateRating(req.user._id, rating);
 
     await paper.save();
@@ -361,15 +357,8 @@ router.delete("/:id", verifyToken, verifyAdmin, async (req, res) => {
   try {
     const paper = await Paper.findById(req.params.id);
 
-    if (!paper) {
-      return res.status(404).json({
-        error: "Paper not found",
-      });
-    }
-
     if (paper.pdfLink) {
       const filename = paper.pdfLink.split("/uploads/")[1];
-
       const filePath = path.join(process.cwd(), "uploads", filename);
 
       if (fs.existsSync(filePath)) {
