@@ -41,6 +41,7 @@ api.interceptors.response.use(
 
   (error) => {
     const status = error.response?.status;
+
     const message =
       error.response?.data?.error ||
       error.response?.data?.message ||
@@ -70,11 +71,13 @@ api.interceptors.response.use(
       console.error("Network error: backend may be offline");
     }
 
-    return Promise.reject({
-      status,
-      message,
-      original: error,
-    });
+    /* ================= IMPORTANT FIX ================= */
+    /* keeps axios original error usable */
+
+    error.message = message;
+    error.status = status;
+
+    return Promise.reject(error);
   },
 );
 

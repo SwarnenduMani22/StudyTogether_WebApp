@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import api from "../api/axios";
 import Skeleton from "../components/common/Skeleton";
 import AdminCharts from "../components/admin/AdminCharts";
-import { useAuth } from "../context/AuthContext";
+import useAuth from "../hooks/useAuth";
 import toast from "react-hot-toast";
 
 const Admin = () => {
@@ -62,7 +62,7 @@ const Admin = () => {
 
   /* ================= LOAD DASHBOARD ================= */
 
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -74,11 +74,11 @@ const Admin = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchUsers, fetchStats]);
 
   useEffect(() => {
     loadDashboard();
-  }, []);
+  }, [loadDashboard]);
 
   /* ================= DELETE USER ================= */
 

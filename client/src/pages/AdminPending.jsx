@@ -11,28 +11,19 @@ const AdminPending = () => {
 
   const [previewPdf, setPreviewPdf] = useState(null);
 
-  /* ================= FETCH PENDING ================= */
-
   const fetchPending = async () => {
     try {
       setLoading(true);
       setError("");
 
       const res = await api.get("/papers/admin/pending");
-
-      const data = res?.data || [];
-
-      setPapers(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("Fetch pending error:", err);
+      setPapers(res.data || []);
+    } catch {
       setError("Failed to load pending papers");
-      setPapers([]);
     } finally {
       setLoading(false);
     }
   };
-
-  /* ================= APPROVE ================= */
 
   const approvePaper = async (id) => {
     try {
@@ -40,17 +31,14 @@ const AdminPending = () => {
 
       await api.put(`/papers/admin/approve/${id}`);
 
-      toast.success("Paper approved successfully");
-
+      toast.success("Approved");
       setPapers((prev) => prev.filter((p) => p._id !== id));
-    } catch (err) {
-      toast.error(err.response?.data?.error || "Approval failed");
+    } catch {
+      toast.error("Approval failed");
     } finally {
       setProcessingId(null);
     }
   };
-
-  /* ================= REJECT ================= */
 
   const rejectPaper = async (id) => {
     try {
@@ -58,136 +46,69 @@ const AdminPending = () => {
 
       await api.delete(`/papers/admin/reject/${id}`);
 
-      toast.success("Paper rejected");
-
+      toast.success("Rejected");
       setPapers((prev) => prev.filter((p) => p._id !== id));
-    } catch (err) {
-      toast.error(err.response?.data?.error || "Reject failed");
+    } catch {
+      toast.error("Reject failed");
     } finally {
       setProcessingId(null);
     }
   };
-
-  /* ================= LOAD ================= */
 
   useEffect(() => {
     fetchPending();
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 p-8">
-      <div className="max-w-5xl mx-auto space-y-6 fade-in">
-        {/* TITLE */}
+    <div className="p-8">
+      <h1 className="text-2xl font-bold mb-6">Pending Papers</h1>
 
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-800 dark:text-white">
-            Pending Papers ⏳
-          </h1>
+      {loading && <p>Loading...</p>}
 
-          <button
-            onClick={fetchPending}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded text-sm"
-          >
-            Refresh
-          </button>
-        </div>
+      {error && <p className="text-red-500">{error}</p>}
 
-        {/* ERROR */}
+      {!loading && papers.length === 0 && <p>No pending papers</p>}
 
-        {error && <p className="text-red-500 text-center">{error}</p>}
+      {papers.map((paper) => {
+        const rawPdfLink = paper?.pdfLink || "";
+        const pdfUrl = rawPdfLink.startsWith("http")
+          ? rawPdfLink
+          : `${import.meta.env.VITE_API_URL?.replace("/api/v1", "") || "http://localhost:5000"}${rawPdfLink}`;
 
-        {/* LOADING */}
+        const isProcessing = processingId === paper._id;
 
-        {loading && (
-          <p className="text-center text-gray-500">Loading pending papers...</p>
-        )}
+        return (
+          <div key={paper._id} className="card mb-4">
+            <h3>{paper.title}</h3>
+            <p>
+              {paper.subject} • Sem {paper.semester}
+            </p>
 
-        {/* EMPTY */}
-
-        {!loading && papers.length === 0 && !error && (
-          <p className="text-center text-gray-500">No pending papers 🎉</p>
-        )}
-
-        {/* LIST */}
-
-        {!loading &&
-          papers.map((paper) => {
-            const pdfUrl = paper.pdfLink?.startsWith("http")
-              ? paper.pdfLink
-              : `http://localhost:5000${paper.pdfLink}`;
-
-            return (
-              <div
-                key={paper._id}
-                className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+            <div className="flex gap-3 mt-3">
+              <button
+                onClick={() => setPreviewPdf(pdfUrl)}
+                disabled={isProcessing || !rawPdfLink}
               >
-                {/* INFO */}
+                Preview
+              </button>
 
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
-                    {paper.title}
-                  </h3>
+              <button
+                onClick={() => approvePaper(paper._id)}
+                disabled={isProcessing}
+              >
+                {isProcessing ? "Processing..." : "Approve"}
+              </button>
 
-                  <p className="text-gray-500 text-sm">
-                    📚 {paper.subject} • Semester {paper.semester}
-                  </p>
-
-                  {paper.uploadedBy && (
-                    <p className="text-xs text-gray-400 mt-1">
-                      Uploaded by: {paper.uploadedBy.name}
-                    </p>
-                  )}
-                </div>
-
-                {/* ACTIONS */}
-
-                <div className="flex gap-3 flex-wrap">
-                  {/* PREVIEW */}
-
-                  <button
-                    onClick={() => setPreviewPdf(pdfUrl)}
-                    className="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded text-sm"
-                  >
-                    Preview
-                  </button>
-
-                  {/* DOWNLOAD */}
-
-                  <a
-                    href={pdfUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
-                  >
-                    Download
-                  </a>
-
-                  {/* APPROVE */}
-
-                  <button
-                    onClick={() => approvePaper(paper._id)}
-                    disabled={processingId === paper._id}
-                    className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm disabled:opacity-50"
-                  >
-                    {processingId === paper._id ? "Approving..." : "Approve"}
-                  </button>
-
-                  {/* REJECT */}
-
-                  <button
-                    onClick={() => rejectPaper(paper._id)}
-                    disabled={processingId === paper._id}
-                    className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm disabled:opacity-50"
-                  >
-                    Reject
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-      </div>
-
-      {/* PDF PREVIEW */}
+              <button
+                onClick={() => rejectPaper(paper._id)}
+                disabled={isProcessing}
+              >
+                {isProcessing ? "Processing..." : "Reject"}
+              </button>
+            </div>
+          </div>
+        );
+      })}
 
       {previewPdf && (
         <PDFModal pdfLink={previewPdf} onClose={() => setPreviewPdf(null)} />

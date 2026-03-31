@@ -8,6 +8,9 @@ import User from "../models/User.js";
 
 const router = express.Router();
 
+const escapeRegex = (value = "") =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 /* =====================================================
 GET ALL USERS (ADMIN)
 GET /api/v1/admin/users
@@ -20,12 +23,13 @@ router.get("/users", verifyToken, verifyAdmin, async (req, res) => {
     const skip = (page - 1) * limit;
 
     const search = (req.query.search || "").trim();
+    const safeSearch = escapeRegex(search);
 
     const filter = search
       ? {
           $or: [
-            { name: { $regex: search, $options: "i" } },
-            { email: { $regex: search, $options: "i" } },
+            { name: { $regex: safeSearch, $options: "i" } },
+            { email: { $regex: safeSearch, $options: "i" } },
           ],
         }
       : {};

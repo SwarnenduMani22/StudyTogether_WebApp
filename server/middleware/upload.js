@@ -24,15 +24,13 @@ const storage = multer.diskStorage({
     try {
       const ext = path.extname(file.originalname).toLowerCase();
 
-      /* sanitize original filename */
+      /* sanitize filename */
 
       const baseName = path
         .basename(file.originalname, ext)
         .replace(/\s+/g, "_")
         .replace(/[^\w.-]/g, "")
         .toLowerCase();
-
-      /* generate random id */
 
       const randomId = crypto.randomBytes(6).toString("hex");
 
@@ -49,14 +47,15 @@ const storage = multer.diskStorage({
 
 const fileFilter = (req, file, cb) => {
   try {
-    if (!file || !file.mimetype) {
-      return cb(new Error("Invalid file upload"), false);
+    if (!file) {
+      return cb(new Error("No file uploaded"), false);
     }
 
-    const allowedMimeTypes = ["application/pdf"];
-    const ext = path.extname(file.originalname).toLowerCase();
+    const isPDF =
+      file.mimetype === "application/pdf" &&
+      path.extname(file.originalname).toLowerCase() === ".pdf";
 
-    if (!allowedMimeTypes.includes(file.mimetype) || ext !== ".pdf") {
+    if (!isPDF) {
       return cb(new Error("Only PDF files are allowed"), false);
     }
 
@@ -70,12 +69,31 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({
   storage,
-
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: 10 * 1024 * 1024, // 10MB
   },
-
   fileFilter,
 });
+
+/* ================= ERROR HANDLER WRAPPER ================= */
+/* IMPORTANT: This fixes crash + 500 error */
+
+export const uploadMiddleware = (req, res, next) => {
+  const singleUpload = upload.single("pdf");
+
+  singleUpload(req, res, function (err) {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({
+        error: err.message,
+      });
+    } else if (err) {
+      return res.status(400).json({
+        error: err.message,
+      });
+    }
+
+    next();
+  });
+};
 
 export default upload;

@@ -24,7 +24,7 @@ const Bookmarks = () => {
 
       const res = await api.get("/users/profile");
 
-      const bookmarks = res?.data?.bookmarks || [];
+      const bookmarks = res?.data?.user?.bookmarks || [];
 
       setPapers(Array.isArray(bookmarks) ? bookmarks : []);
     } catch (err) {

@@ -7,15 +7,32 @@ import Paper from "../models/Paper.js";
 
 import verifyToken from "../middleware/authMiddleware.js";
 import verifyAdmin from "../middleware/adminMiddleware.js";
-import upload from "../middleware/upload.js";
+import { uploadMiddleware } from "../middleware/upload.js";
 
 const router = express.Router();
 
-/* =====================================================
-UPLOAD PAPER (ADMIN + USER)
-===================================================== */
+const SUBJECT_MAP = {
+  dbms: "DBMS",
+  "data structure": "Data Structure",
+  "operating system": "Operating System",
+  "computer network": "Computer Network",
+  "software engineering": "Software Engineering",
+  "artificial intelligence": "Artificial Intelligence",
+};
 
-router.post("/upload", verifyToken, upload.single("pdf"), async (req, res) => {
+const VALID_SUBJECTS = new Set(Object.values(SUBJECT_MAP));
+
+const escapeRegex = (value = "") =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const normalizeSubject = (value = "") => {
+  const normalized = value.trim().toLowerCase();
+  return SUBJECT_MAP[normalized] || value.trim();
+};
+
+/* ================= UPLOAD PAPER ================= */
+
+router.post("/upload", verifyToken, uploadMiddleware, async (req, res) => {
   try {
     let { title, subject, semester } = req.body;
 
@@ -25,22 +42,13 @@ router.post("/upload", verifyToken, upload.single("pdf"), async (req, res) => {
       });
     }
 
-    /* ================= SUBJECT NORMALIZATION ================= */
+    subject = normalizeSubject(subject);
 
-    subject = subject.trim().toLowerCase();
-
-    const subjectMap = {
-      dbms: "DBMS",
-      "data structure": "Data Structure",
-      "operating system": "Operating System",
-      "computer network": "Computer Network",
-      "software engineering": "Software Engineering",
-      "artificial intelligence": "Artificial Intelligence",
-    };
-
-    subject = subjectMap[subject] || subject;
-
-    /* ================= USER LIMIT ================= */
+    if (!VALID_SUBJECTS.has(subject)) {
+      return res.status(400).json({
+        error: "Invalid subject",
+      });
+    }
 
     if (req.user.role !== "admin") {
       const activeUploads = await Paper.countDocuments({
@@ -55,11 +63,12 @@ router.post("/upload", verifyToken, upload.single("pdf"), async (req, res) => {
       }
     }
 
-    /* ================= DUPLICATE CHECK ================= */
+    const safeTitle = escapeRegex(title.trim());
+    const safeSubject = escapeRegex(subject);
 
     const existingPaper = await Paper.findOne({
-      title: title.trim(),
-      subject,
+      title: { $regex: `^${safeTitle}$`, $options: "i" },
+      subject: { $regex: `^${safeSubject}$`, $options: "i" },
       semester: Number(semester),
     });
 
@@ -72,8 +81,6 @@ router.post("/upload", verifyToken, upload.single("pdf"), async (req, res) => {
     const filename = req.file.filename;
 
     const pdfLink = `${req.protocol}://${req.get("host")}/uploads/${filename}`;
-
-    /* ================= ADMIN AUTO APPROVE ================= */
 
     const status = req.user.role === "admin" ? "approved" : "pending";
 
@@ -95,8 +102,13 @@ router.post("/upload", verifyToken, upload.single("pdf"), async (req, res) => {
       paper,
     });
   } catch (error) {
-    console.error("Upload paper error:", error);
+    if (error?.code === 11000) {
+      return res.status(400).json({
+        error: "This paper already exists",
+      });
+    }
 
+    console.error("Upload paper error:", error);
     res.status(500).json({
       error: "Server error while uploading paper",
     });
@@ -104,7 +116,7 @@ router.post("/upload", verifyToken, upload.single("pdf"), async (req, res) => {
 });
 
 /* =====================================================
-GET PAPERS (SEARCH + FILTER + PAGINATION)
+GET PAPERS
 ===================================================== */
 
 router.get("/", verifyToken, async (req, res) => {
@@ -126,14 +138,15 @@ router.get("/", verifyToken, async (req, res) => {
     };
 
     if (search) {
+      const safeSearch = escapeRegex(search);
+
       filter.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { subject: { $regex: search, $options: "i" } },
+        { title: { $regex: safeSearch, $options: "i" } },
+        { subject: { $regex: safeSearch, $options: "i" } },
       ];
     }
 
     if (subject) filter.subject = subject;
-
     if (semester) filter.semester = Number(semester);
 
     let sortOption = { createdAt: -1 };
@@ -165,7 +178,7 @@ router.get("/", verifyToken, async (req, res) => {
 });
 
 /* =====================================================
-ADMIN: GET PENDING PAPERS
+ADMIN: GET PENDING
 ===================================================== */
 
 router.get("/admin/pending", verifyToken, verifyAdmin, async (req, res) => {
@@ -185,20 +198,26 @@ router.get("/admin/pending", verifyToken, verifyAdmin, async (req, res) => {
 });
 
 /* =====================================================
-ADMIN APPROVE PAPER
+ADMIN APPROVE
 ===================================================== */
 
 router.put("/admin/approve/:id", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ error: "Invalid paper id" });
     }
 
     const paper = await Paper.findByIdAndUpdate(
-      req.params.id,
+      id,
       { status: "approved" },
       { new: true },
     );
+
+    if (!paper) {
+      return res.status(404).json({ error: "Paper not found" });
+    }
 
     res.json({
       message: "Paper approved successfully",
@@ -214,7 +233,7 @@ router.put("/admin/approve/:id", verifyToken, verifyAdmin, async (req, res) => {
 });
 
 /* =====================================================
-ADMIN REJECT PAPER
+ADMIN REJECT (FINAL SAFE)
 ===================================================== */
 
 router.delete(
@@ -223,26 +242,38 @@ router.delete(
   verifyAdmin,
   async (req, res) => {
     try {
-      const paper = await Paper.findById(req.params.id);
+      const { id } = req.params;
 
-      if (!paper) {
-        return res.status(404).json({
-          error: "Paper not found",
-        });
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ error: "Invalid paper ID" });
       }
 
-      if (paper.pdfLink) {
-        const filename = paper.pdfLink.split("/uploads/")[1];
-        const filePath = path.join(process.cwd(), "uploads", filename);
+      const paper = await Paper.findById(id);
 
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
+      if (!paper) {
+        return res.status(404).json({ error: "Paper not found" });
+      }
+
+      if (paper.pdfLink && paper.pdfLink.includes("/uploads/")) {
+        try {
+          const filename = paper.pdfLink.split("/uploads/")[1];
+
+          if (filename) {
+            const filePath = path.join(process.cwd(), "uploads", filename);
+
+            if (fs.existsSync(filePath)) {
+              fs.unlinkSync(filePath);
+            }
+          }
+        } catch (err) {
+          console.error("File delete error:", err.message);
         }
       }
 
       await paper.deleteOne();
 
       res.json({
+        success: true,
         message: "Paper rejected and deleted",
       });
     } catch (error) {
@@ -256,7 +287,7 @@ router.delete(
 );
 
 /* =====================================================
-TRENDING PAPERS
+TRENDING
 ===================================================== */
 
 router.get("/trending", async (req, res) => {
@@ -280,47 +311,84 @@ router.get("/trending", async (req, res) => {
 });
 
 /* =====================================================
-VIEW COUNTER
+GET SINGLE PAPER
 ===================================================== */
 
-router.post("/:id/view", verifyToken, async (req, res) => {
+router.get("/:id", verifyToken, async (req, res) => {
   try {
-    await Paper.findByIdAndUpdate(req.params.id, {
-      $inc: { views: 1 },
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid paper id" });
+    }
+
+    const filter = { _id: id };
+
+    if (req.user.role !== "admin") {
+      filter.status = "approved";
+      filter.isActive = true;
+    }
+
+    const paper = await Paper.findOne(filter).populate(
+      "uploadedBy",
+      "name email",
+    );
+
+    if (!paper) {
+      return res.status(404).json({ error: "Paper not found" });
+    }
+
+    res.json(paper);
+  } catch (error) {
+    console.error("Fetch paper error:", error);
+
+    res.status(500).json({
+      error: "Failed to fetch paper",
     });
+  }
+});
+
+/* ================= VIEW ================= */
+
+router.post("/:id/view", verifyToken, async (req, res, next) => {
+  try {
+    const paper = await Paper.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { views: 1 } },
+      { new: true },
+    );
+
+    if (!paper) {
+      return res.status(404).json({ error: "Paper not found" });
+    }
 
     res.json({ message: "View counted" });
   } catch (error) {
-    console.error("View counter error:", error);
-
-    res.status(500).json({
-      error: "Failed to count view",
-    });
+    next(error);
   }
 });
 
-/* =====================================================
-DOWNLOAD COUNTER
-===================================================== */
+/* ================= DOWNLOAD ================= */
 
-router.post("/:id/download", verifyToken, async (req, res) => {
+router.post("/:id/download", verifyToken, async (req, res, next) => {
   try {
-    await Paper.findByIdAndUpdate(req.params.id, {
-      $inc: { downloads: 1 },
-    });
+    const paper = await Paper.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { downloads: 1 } },
+      { new: true },
+    );
+
+    if (!paper) {
+      return res.status(404).json({ error: "Paper not found" });
+    }
 
     res.json({ message: "Download counted" });
   } catch (error) {
-    console.error("Download counter error:", error);
-
-    res.status(500).json({
-      error: "Failed to count download",
-    });
+    next(error);
   }
 });
-
 /* =====================================================
-RATE PAPER
+RATE (ONE USER ONE RATING)
 ===================================================== */
 
 router.post("/:id/rate", verifyToken, async (req, res) => {
@@ -335,11 +403,31 @@ router.post("/:id/rate", verifyToken, async (req, res) => {
 
     const paper = await Paper.findById(req.params.id);
 
-    paper.addOrUpdateRating(req.user._id, rating);
+    if (!paper) {
+      return res.status(404).json({
+        error: "Paper not found",
+      });
+    }
+
+    const existing = paper.ratings.find(
+      (r) => r.user.toString() === req.user._id.toString(),
+    );
+
+    if (existing) {
+      existing.value = rating;
+    } else {
+      paper.ratings.push({
+        user: req.user._id,
+        value: rating,
+      });
+    }
 
     await paper.save();
 
-    res.json({ message: "Rating submitted" });
+    res.json({
+      message: "Rating submitted ⭐",
+      averageRating: paper.averageRating,
+    });
   } catch (error) {
     console.error("Rating error:", error);
 
@@ -350,25 +438,156 @@ router.post("/:id/rate", verifyToken, async (req, res) => {
 });
 
 /* =====================================================
-DELETE PAPER (ADMIN)
+UPDATE PAPER (ADMIN OR OWNER)
+===================================================== */
+
+router.put("/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid paper id" });
+    }
+
+    const paper = await Paper.findById(id);
+
+    if (!paper) {
+      return res.status(404).json({ error: "Paper not found" });
+    }
+
+    const isOwner = paper.uploadedBy.toString() === req.user._id.toString();
+
+    if (!isOwner && req.user.role !== "admin") {
+      return res.status(403).json({ error: "Not allowed to edit this paper" });
+    }
+
+    const updates = {};
+
+    if (typeof req.body.title === "string") {
+      const nextTitle = req.body.title.trim();
+
+      if (nextTitle.length < 3 || nextTitle.length > 200) {
+        return res
+          .status(400)
+          .json({ error: "Title must be 3-200 characters" });
+      }
+
+      updates.title = nextTitle;
+    }
+
+    if (typeof req.body.subject === "string") {
+      const nextSubject = normalizeSubject(req.body.subject);
+
+      if (!VALID_SUBJECTS.has(nextSubject)) {
+        return res.status(400).json({ error: "Invalid subject" });
+      }
+
+      updates.subject = nextSubject;
+    }
+
+    if (req.body.semester !== undefined) {
+      const nextSemester = Number(req.body.semester);
+
+      if (
+        !Number.isInteger(nextSemester) ||
+        nextSemester < 1 ||
+        nextSemester > 8
+      ) {
+        return res
+          .status(400)
+          .json({ error: "Semester must be between 1 and 8" });
+      }
+
+      updates.semester = nextSemester;
+    }
+
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ error: "Nothing to update" });
+    }
+
+    const finalTitle = updates.title || paper.title;
+    const finalSubject = updates.subject || paper.subject;
+    const finalSemester = updates.semester || paper.semester;
+
+    const duplicate = await Paper.findOne({
+      _id: { $ne: paper._id },
+      title: { $regex: `^${escapeRegex(finalTitle)}$`, $options: "i" },
+      subject: { $regex: `^${escapeRegex(finalSubject)}$`, $options: "i" },
+      semester: finalSemester,
+    });
+
+    if (duplicate) {
+      return res.status(400).json({
+        error: "Another paper with same title/subject/semester exists",
+      });
+    }
+
+    Object.assign(paper, updates);
+    await paper.save();
+
+    const updatedPaper = await Paper.findById(paper._id).populate(
+      "uploadedBy",
+      "name email",
+    );
+
+    res.json({
+      success: true,
+      message: "Paper updated successfully",
+      paper: updatedPaper,
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(400).json({
+        error: "Another paper with same title/subject/semester exists",
+      });
+    }
+
+    console.error("Update paper error:", error);
+
+    res.status(500).json({
+      error: "Failed to update paper",
+    });
+  }
+});
+
+/* =====================================================
+DELETE (ADMIN FINAL SAFE)
 ===================================================== */
 
 router.delete("/:id", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const paper = await Paper.findById(req.params.id);
+    const { id } = req.params;
 
-    if (paper.pdfLink) {
-      const filename = paper.pdfLink.split("/uploads/")[1];
-      const filePath = path.join(process.cwd(), "uploads", filename);
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid paper ID" });
+    }
 
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+    const paper = await Paper.findById(id);
+
+    if (!paper) {
+      return res.status(404).json({ error: "Paper not found" });
+    }
+
+    if (paper.pdfLink && paper.pdfLink.includes("/uploads/")) {
+      try {
+        const filename = paper.pdfLink.split("/uploads/")[1];
+
+        if (filename) {
+          const filePath = path.join(process.cwd(), "uploads", filename);
+
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        }
+      } catch (err) {
+        console.error("File delete error:", err.message);
       }
     }
 
     await paper.deleteOne();
 
     res.json({
+      success: true,
       message: "Paper deleted successfully",
     });
   } catch (error) {

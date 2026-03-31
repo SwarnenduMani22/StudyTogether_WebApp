@@ -6,6 +6,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import path from "path";
+// ❌ duplicate cors remove (ONLY THIS FIX)
 
 import errorHandler from "./middleware/errorMiddleware.js";
 
@@ -62,15 +63,22 @@ app.use("/api/v1", limiter);
 
 /* ================= CORS ================= */
 
-const allowedOrigins = [process.env.CLIENT_URL || "http://localhost:5173"];
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  process.env.CLIENT_URL,
+].filter(Boolean);
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
       } else {
-        callback(new Error("CORS not allowed"));
+        console.log("❌ Blocked by CORS:", origin);
+        return callback(new Error("Not allowed by CORS"));
       }
     },
     credentials: true,
@@ -166,8 +174,6 @@ const startServer = async () => {
   const server = app.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
   });
-
-  /* Graceful Shutdown */
 
   const shutdown = () => {
     console.log("🛑 Server shutting down...");

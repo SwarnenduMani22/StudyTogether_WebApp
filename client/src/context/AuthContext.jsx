@@ -1,7 +1,6 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import api from "../api/axios";
-
-const AuthContext = createContext();
+import AuthContext from "./auth-context";
 
 /* ================= PROVIDER ================= */
 
@@ -83,16 +82,4 @@ export const AuthProvider = ({ children }) => {
       {!loading && children}
     </AuthContext.Provider>
   );
-};
-
-/* ================= CUSTOM HOOK ================= */
-export { AuthContext };
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-
-  if (!context) {
-    throw new Error("useAuth must be used inside AuthProvider");
-  }
-
-  return context;
 };

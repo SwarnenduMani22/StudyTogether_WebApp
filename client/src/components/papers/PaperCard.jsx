@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   incrementView,
   incrementDownload,
@@ -12,7 +12,7 @@ import PDFModal from "./PDFModal";
 import useAuth from "../../hooks/useAuth";
 import toast from "react-hot-toast";
 
-const PaperCard = ({ paper }) => {
+const PaperCard = ({ paper, onDelete }) => {
   const { user } = useAuth();
 
   const [preview, setPreview] = useState(false);
@@ -29,10 +29,21 @@ const PaperCard = ({ paper }) => {
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const [bookmarked, setBookmarked] = useState(paper?.bookmarked || false);
+  const [bookmarked, setBookmarked] = useState(false);
+
   const [avgRating, setAvgRating] = useState(
     Number(paper?.averageRating || 0).toFixed(1),
   );
+
+  const [hasRated, setHasRated] = useState(false);
+
+  /* ================= SYNC BOOKMARK ================= */
+
+  useEffect(() => {
+    if (paper?.isBookmarked !== undefined) {
+      setBookmarked(paper.isBookmarked);
+    }
+  }, [paper]);
 
   if (!paper) return null;
 
@@ -75,11 +86,7 @@ const PaperCard = ({ paper }) => {
   const handleDelete = async () => {
     if (!user || user.role !== "admin") return;
 
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this paper?",
-    );
-
-    if (!confirmDelete) return;
+    if (!window.confirm("Are you sure you want to delete this paper?")) return;
 
     try {
       setDeleting(true);
@@ -87,8 +94,9 @@ const PaperCard = ({ paper }) => {
       await deletePaper(paper._id);
 
       toast.success("Paper deleted successfully");
-    } catch (error) {
-      console.error("Delete failed:", error);
+
+      if (onDelete) onDelete(); // 🔥 UI refresh
+    } catch {
       toast.error("Failed to delete paper");
     } finally {
       setDeleting(false);
@@ -108,10 +116,8 @@ const PaperCard = ({ paper }) => {
       });
 
       toast.success("Paper updated successfully");
-
       setEditing(false);
-    } catch (error) {
-      console.error(error);
+    } catch {
       toast.error("Update failed");
     } finally {
       setLoading(false);
@@ -122,19 +128,27 @@ const PaperCard = ({ paper }) => {
 
   const handleRating = async (value) => {
     if (!user) {
-      toast.error("Login required to rate");
+      toast.error("Login required");
+      return;
+    }
+
+    if (hasRated) {
+      toast.error("You already rated this paper");
       return;
     }
 
     try {
-      await ratePaper(paper._id, value);
+      const res = await ratePaper(paper._id, value);
 
-      const newAvg = ((Number(avgRating) + value) / 2).toFixed(1);
-      setAvgRating(newAvg);
+      setHasRated(true);
+
+      if (res?.averageRating) {
+        setAvgRating(res.averageRating.toFixed(1));
+      }
 
       toast.success("Rating submitted ⭐");
-    } catch {
-      toast.error("Rating failed");
+    } catch (err) {
+      toast.error(err?.message || "Rating failed");
     }
   };
 
@@ -151,11 +165,9 @@ const PaperCard = ({ paper }) => {
 
       setBookmarked(res.bookmarked);
 
-      if (res.bookmarked) {
-        toast.success("Added to bookmarks ⭐");
-      } else {
-        toast.success("Bookmark removed");
-      }
+      toast.success(
+        res.bookmarked ? "Added to bookmarks ⭐" : "Bookmark removed",
+      );
     } catch {
       toast.error("Bookmark failed");
     }
@@ -165,47 +177,40 @@ const PaperCard = ({ paper }) => {
     <>
       <div className="card hover:shadow-xl transition duration-200">
         {/* TITLE */}
-
         <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
           {paper.title}
         </h3>
 
         {/* SUBJECT */}
-
         <p className="text-sm text-gray-500 mt-2">📚 {paper.subject}</p>
 
         {/* SEMESTER */}
-
         <p className="text-sm text-gray-500">🎓 Semester {paper.semester}</p>
 
         {/* UPLOADER */}
-
         {paper.uploadedBy?.name && (
           <p className="text-xs text-gray-400 mt-1">
             Uploaded by: {paper.uploadedBy.name}
           </p>
         )}
 
-        {/* ⭐ AVERAGE RATING */}
-
+        {/* RATING */}
         <div className="mt-2 text-yellow-500 font-semibold text-sm">
           ⭐ {avgRating} / 5
         </div>
 
         {/* STATS */}
-
         <div className="flex gap-4 text-xs text-gray-400 mt-3">
           <span>👁 {views}</span>
           <span>⬇ {downloads}</span>
         </div>
 
-        {/* ACTION BUTTONS */}
-
+        {/* BUTTONS */}
         <div className="flex flex-wrap gap-3 mt-4">
           <button
             onClick={handlePreview}
             disabled={previewLoading}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-sm"
+            className="bg-indigo-600 text-white px-3 py-1 rounded text-sm"
           >
             {previewLoading ? "Loading..." : "Preview"}
           </button>
@@ -215,14 +220,14 @@ const PaperCard = ({ paper }) => {
             target="_blank"
             rel="noopener noreferrer"
             onClick={handleDownload}
-            className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm"
+            className="bg-green-500 text-white px-3 py-1 rounded text-sm"
           >
             Download
           </a>
 
           <button
             onClick={handleBookmark}
-            className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-sm"
+            className="bg-yellow-500 text-white px-3 py-1 rounded text-sm"
           >
             {bookmarked ? "⭐ Saved" : "🔖 Save"}
           </button>
@@ -231,7 +236,7 @@ const PaperCard = ({ paper }) => {
             <>
               <button
                 onClick={() => setEditing(true)}
-                className="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded text-sm"
+                className="bg-yellow-600 text-white px-3 py-1 rounded text-sm"
               >
                 Edit
               </button>
@@ -239,7 +244,7 @@ const PaperCard = ({ paper }) => {
               <button
                 onClick={handleDelete}
                 disabled={deleting}
-                className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm"
+                className="bg-red-500 text-white px-3 py-1 rounded text-sm"
               >
                 {deleting ? "Deleting..." : "Delete"}
               </button>
@@ -247,14 +252,14 @@ const PaperCard = ({ paper }) => {
           )}
         </div>
 
-        {/* RATING BUTTONS */}
-
+        {/* RATE */}
         <div className="flex gap-1 mt-3">
           {[1, 2, 3, 4, 5].map((star) => (
             <button
               key={star}
               onClick={() => handleRating(star)}
-              className="text-yellow-400 text-lg hover:scale-110"
+              disabled={hasRated}
+              className="text-yellow-400 text-lg hover:scale-110 disabled:opacity-40"
             >
               ⭐
             </button>
@@ -263,7 +268,6 @@ const PaperCard = ({ paper }) => {
       </div>
 
       {/* EDIT MODAL */}
-
       {editing && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-gray-900 p-6 rounded-lg w-96">
@@ -273,21 +277,18 @@ const PaperCard = ({ paper }) => {
               className="input mb-3 w-full"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Title"
             />
 
             <input
               className="input mb-3 w-full"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="Subject"
             />
 
             <input
               className="input mb-4 w-full"
               value={semester}
               onChange={(e) => setSemester(e.target.value)}
-              placeholder="Semester"
             />
 
             <div className="flex gap-3">
@@ -310,8 +311,7 @@ const PaperCard = ({ paper }) => {
         </div>
       )}
 
-      {/* PDF MODAL */}
-
+      {/* PDF */}
       {preview && (
         <PDFModal pdfLink={pdfUrl} onClose={() => setPreview(false)} />
       )}

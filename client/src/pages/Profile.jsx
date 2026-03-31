@@ -53,7 +53,7 @@ const Profile = () => {
         total: papersData.total || 0,
       });
 
-      setBookmarksCount(profileData?.bookmarks?.length || 0);
+      setBookmarksCount(profileData?.user?.bookmarks?.length || 0);
     } catch (error) {
       console.error("Profile load failed:", error);
     } finally {

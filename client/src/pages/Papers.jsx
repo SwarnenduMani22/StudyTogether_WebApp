@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getPapers } from "../api/paper";
 
 import PaperCard from "../components/papers/PaperCard";
@@ -33,7 +33,7 @@ const Papers = () => {
 
   /* ================= FETCH PAPERS ================= */
 
-  const fetchPapers = async () => {
+  const fetchPapers = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -47,32 +47,26 @@ const Papers = () => {
       });
 
       const papersData = data?.papers || [];
-      const pages = data?.totalPages || 1;
 
       setPapers(Array.isArray(papersData) ? papersData : []);
-      setTotalPages(pages);
+      setTotalPages(data?.totalPages || 1);
     } catch (err) {
-      console.error("Fetch papers error:", err);
+      console.error(err);
       setError("Failed to load papers");
       setPapers([]);
     } finally {
       setLoading(false);
     }
-  };
-
-  /* ================= LOAD DATA ================= */
+  }, [page, debouncedSearch, semester, subject, sort]);
 
   useEffect(() => {
     fetchPapers();
-  }, [page, debouncedSearch, semester, subject, sort]);
+  }, [fetchPapers]);
 
-  /* ================= SEARCH SUGGESTIONS ================= */
+  /* ================= SEARCH SUGGEST ================= */
 
   useEffect(() => {
-    if (!search.trim()) {
-      setSuggestions([]);
-      return;
-    }
+    if (!search.trim()) return setSuggestions([]);
 
     const filtered = papers
       .filter((p) => p.title.toLowerCase().includes(search.toLowerCase()))
@@ -81,20 +75,23 @@ const Papers = () => {
     setSuggestions(filtered);
   }, [search, papers]);
 
+  /* ================= DELETE REFRESH ================= */
+
+  const handleDeleteRefresh = () => {
+    fetchPapers();
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 p-8">
       <div className="max-w-6xl mx-auto">
-        {/* ================= TITLE ================= */}
-
         <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">
           Study Papers 📚
         </h1>
 
-        {/* ================= FILTERS ================= */}
+        {/* FILTERS */}
 
         <div className="flex flex-col md:flex-row gap-4 mb-8 relative">
           {/* SEARCH */}
-
           <div className="relative">
             <input
               type="text"
@@ -106,8 +103,6 @@ const Papers = () => {
               }}
               className="input md:w-64"
             />
-
-            {/* SUGGESTIONS */}
 
             {suggestions.length > 0 && (
               <div className="absolute z-50 w-full bg-white dark:bg-gray-800 shadow-lg rounded mt-1">
@@ -127,8 +122,7 @@ const Papers = () => {
             )}
           </div>
 
-          {/* SEMESTER */}
-
+          {/* SEM */}
           <select
             value={semester}
             onChange={(e) => {
@@ -138,7 +132,6 @@ const Papers = () => {
             className="input md:w-48"
           >
             <option value="all">All Semester</option>
-
             {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
               <option key={s} value={s}>
                 Semester {s}
@@ -147,7 +140,6 @@ const Papers = () => {
           </select>
 
           {/* SUBJECT */}
-
           <select
             value={subject}
             onChange={(e) => {
@@ -168,7 +160,6 @@ const Papers = () => {
           </select>
 
           {/* SORT */}
-
           <select
             value={sort}
             onChange={(e) => {
@@ -183,8 +174,7 @@ const Papers = () => {
           </select>
         </div>
 
-        {/* ================= LOADING ================= */}
-
+        {/* LOADING */}
         {loading && (
           <div className="grid md:grid-cols-3 gap-6">
             {[1, 2, 3].map((i) => (
@@ -193,55 +183,43 @@ const Papers = () => {
           </div>
         )}
 
-        {/* ================= ERROR ================= */}
+        {/* ERROR */}
+        {error && <p className="text-red-500 text-center">{error}</p>}
 
-        {error && (
-          <p className="text-red-500 text-center font-medium">{error}</p>
-        )}
-
-        {/* ================= EMPTY ================= */}
-
+        {/* EMPTY */}
         {!loading && papers.length === 0 && !error && (
-          <p className="text-gray-500 dark:text-gray-400 text-center">
-            No papers found.
-          </p>
+          <p className="text-center text-gray-500">No papers found</p>
         )}
 
-        {/* ================= PAPER GRID ================= */}
-
+        {/* GRID */}
         {!loading && papers.length > 0 && (
-          <div className="grid sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-3 gap-6">
             {papers.map((paper) => (
-              <PaperCard key={paper._id} paper={paper} />
+              <PaperCard
+                key={paper._id}
+                paper={paper}
+                onDelete={handleDeleteRefresh}
+              />
             ))}
           </div>
         )}
 
-        {/* ================= PAGINATION ================= */}
-
+        {/* PAGINATION */}
         {totalPages > 1 && (
           <div className="flex justify-center gap-3 mt-10">
-            {Array.from({ length: totalPages }, (_, i) => {
-              const pageNumber = i + 1;
-
-              return (
-                <button
-                  key={pageNumber}
-                  onClick={() => {
-                    setPage(pageNumber);
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className={`px-4 py-2 rounded-md text-sm transition
-                  ${
-                    page === pageNumber
-                      ? "bg-indigo-600 text-white"
-                      : "bg-gray-200 dark:bg-gray-700"
-                  }`}
-                >
-                  {pageNumber}
-                </button>
-              );
-            })}
+            {Array.from({ length: totalPages }, (_, i) => (
+              <button
+                key={i}
+                onClick={() => setPage(i + 1)}
+                className={`px-4 py-2 rounded ${
+                  page === i + 1
+                    ? "bg-indigo-600 text-white"
+                    : "bg-gray-200 dark:bg-gray-700"
+                }`}
+              >
+                {i + 1}
+              </button>
+            ))}
           </div>
         )}
       </div>

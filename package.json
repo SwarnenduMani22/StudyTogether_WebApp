@@ -89,8 +89,9 @@
     "concurrently": "^9.2.1"
   },
   "scripts": {
-    "start": "npm run dev",
-    "server": "npm start --prefix server",
+    "start": "npm run start --prefix server",
+    "build": "npm run build --prefix client",
+    "server": "npm run dev --prefix server",
     "client": "npm run dev --prefix client",
     "dev": "concurrently \"npm run server\" \"npm run client\""
   },

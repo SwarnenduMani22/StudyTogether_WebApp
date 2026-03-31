@@ -6,12 +6,6 @@ import "./index.css";
 
 import { AuthProvider } from "./context/AuthContext";
 
-/* ================= PDF WORKER (react-pdf) ================= */
-
-import { pdfjs } from "react-pdf";
-
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
-
 /* ================= LOAD SAVED THEME ================= */
 
 function loadTheme() {

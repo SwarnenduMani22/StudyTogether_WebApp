@@ -1,9 +1,13 @@
 import { useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 
-/* ================= PDF WORKER ================= */
+/* ================= PDF WORKER FIX ================= */
 
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+// ✅ CDN issue avoid (BEST for Vite)
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url,
+).toString();
 
 const PDFViewer = ({ file }) => {
   const [numPages, setNumPages] = useState(null);
@@ -24,7 +28,7 @@ const PDFViewer = ({ file }) => {
 
   const onLoadError = (err) => {
     console.error("PDF load error:", err);
-    setError("Failed to load PDF");
+    setError("Failed to load PDF file.");
     setLoading(false);
   };
 
@@ -56,7 +60,7 @@ const PDFViewer = ({ file }) => {
 
       {/* ERROR */}
 
-      {error && <p className="text-red-500 mb-4">{error}</p>}
+      {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
 
       {/* CONTROLS */}
 

@@ -119,13 +119,16 @@ paperSchema.index({ views: -1 });
 
 paperSchema.index({ status: 1, isActive: 1 });
 
+/* 🔥 UNIQUE INDEX (NO DUPLICATE PAPERS) */
+
+paperSchema.index({ title: 1, subject: 1, semester: 1 }, { unique: true });
+
 /* ================= VIRTUAL FIELDS ================= */
 
 /* Popularity Score */
 
 paperSchema.virtual("popularityScore").get(function () {
   const ratingScore = this.ratings?.length || 0;
-
   return this.views + this.downloads * 2 + ratingScore * 5;
 });
 
@@ -141,7 +144,7 @@ paperSchema.virtual("averageRating").get(function () {
 
 /* ================= METHODS ================= */
 
-/* Add / Update rating */
+/* ⭐ ONE USER = ONE RATING */
 
 paperSchema.methods.addOrUpdateRating = function (userId, rating) {
   const existingRating = this.ratings.find(

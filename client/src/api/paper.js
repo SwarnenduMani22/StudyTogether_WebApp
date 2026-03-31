@@ -12,7 +12,6 @@ const validateId = (id) => {
 
 /* =====================================================
 GET PAPERS
-(Search + Filter + Pagination + Sort)
 ===================================================== */
 
 export const getPapers = async ({
@@ -43,7 +42,6 @@ export const getPaper = async (id) => {
 
 /* =====================================================
 UPLOAD PAPER
-(Admin + User)
 ===================================================== */
 
 export const uploadPaper = async (formData, onUploadProgress) => {
@@ -62,7 +60,7 @@ export const uploadPaper = async (formData, onUploadProgress) => {
 };
 
 /* =====================================================
-UPDATE PAPER (ADMIN)
+UPDATE PAPER
 ===================================================== */
 
 export const updatePaper = async (id, data) => {
@@ -78,7 +76,7 @@ export const updatePaper = async (id, data) => {
 };
 
 /* =====================================================
-DELETE PAPER (ADMIN)
+DELETE PAPER
 ===================================================== */
 
 export const deletePaper = async (id) => {
@@ -100,14 +98,14 @@ export const getTrendingPapers = async () => {
 };
 
 /* =====================================================
-RATE PAPER ⭐
+RATE PAPER ⭐ (FIXED)
 ===================================================== */
 
 export const ratePaper = async (id, rating) => {
   validateId(id);
 
-  if (!rating) {
-    throw new Error("Rating required");
+  if (!rating || rating < 1 || rating > 5) {
+    throw new Error("Rating must be between 1 and 5");
   }
 
   const res = await api.post(`/papers/${id}/rate`, { rating });
@@ -134,7 +132,7 @@ GET USER BOOKMARKS
 export const getBookmarks = async () => {
   const res = await api.get("/users/profile");
 
-  return res.data?.bookmarks || [];
+  return res.data?.user?.bookmarks || [];
 };
 
 /* =====================================================
@@ -158,7 +156,7 @@ export const incrementDownload = async (id) => {
 };
 
 /* =====================================================
-USER UPLOADED PAPERS
+USER PAPERS
 ===================================================== */
 
 export const getMyPapers = async () => {

@@ -10,8 +10,7 @@ import Paper from "../models/Paper.js";
 const router = express.Router();
 
 /* =================================================
-BOOKMARK PAPER
-POST /api/users/bookmark/:id
+BOOKMARK PAPER (SAFE TOGGLE)
 ================================================= */
 
 router.post("/bookmark/:id", verifyToken, async (req, res) => {
@@ -19,49 +18,42 @@ router.post("/bookmark/:id", verifyToken, async (req, res) => {
     const paperId = req.params.id;
 
     if (!mongoose.Types.ObjectId.isValid(paperId)) {
-      return res.status(400).json({
-        error: "Invalid paper ID",
-      });
+      return res.status(400).json({ error: "Invalid paper ID" });
     }
 
     const paper = await Paper.findById(paperId);
 
     if (!paper) {
-      return res.status(404).json({
-        error: "Paper not found",
-      });
+      return res.status(404).json({ error: "Paper not found" });
     }
 
     const user = await User.findById(req.user._id);
 
     if (!user) {
-      return res.status(404).json({
-        error: "User not found",
-      });
+      return res.status(404).json({ error: "User not found" });
     }
 
-    const index = user.bookmarks.indexOf(paperId);
+    const alreadyBookmarked = user.bookmarks.some(
+      (id) => id.toString() === paperId,
+    );
 
-    /* REMOVE BOOKMARK */
-
-    if (index !== -1) {
-      user.bookmarks.splice(index, 1);
+    if (alreadyBookmarked) {
+      user.bookmarks = user.bookmarks.filter((id) => id.toString() !== paperId);
 
       await user.save();
 
       return res.json({
+        success: true,
         message: "Bookmark removed",
         bookmarked: false,
       });
     }
 
-    /* ADD BOOKMARK */
-
     user.bookmarks.push(paperId);
-
     await user.save();
 
     res.json({
+      success: true,
       message: "Paper bookmarked",
       bookmarked: true,
     });
@@ -75,22 +67,21 @@ router.post("/bookmark/:id", verifyToken, async (req, res) => {
 });
 
 /* =================================================
-USER DASHBOARD STATS
-GET /api/users/stats
+USER DASHBOARD STATS (FAST)
 ================================================= */
 
 router.get("/stats", verifyToken, async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const [uploaded, approved, pending] = await Promise.all([
-      Paper.countDocuments({ uploadedBy: userId }),
+    const [approved, pending] = await Promise.all([
       Paper.countDocuments({ uploadedBy: userId, status: "approved" }),
       Paper.countDocuments({ uploadedBy: userId, status: "pending" }),
     ]);
 
     res.json({
-      uploaded,
+      success: true,
+      total: approved + pending,
       approved,
       pending,
     });
@@ -104,23 +95,22 @@ router.get("/stats", verifyToken, async (req, res) => {
 });
 
 /* =================================================
-GET USER PROFILE
-GET /api/users/profile
+GET PROFILE
 ================================================= */
 
 router.get("/profile", verifyToken, async (req, res) => {
   try {
     const user = await User.findById(req.user._id)
       .select("-password")
-      .populate("bookmarks", "title subject semester pdfLink");
-
-    if (!user) {
-      return res.status(404).json({
-        error: "User not found",
+      .populate({
+        path: "bookmarks",
+        select: "title subject semester pdfLink",
       });
-    }
 
-    res.json(user);
+    res.json({
+      success: true,
+      user,
+    });
   } catch (error) {
     console.error("Profile error:", error);
 
@@ -131,20 +121,27 @@ router.get("/profile", verifyToken, async (req, res) => {
 });
 
 /* =================================================
-GET USER UPLOADED PAPERS
-GET /api/users/my-papers
+MY PAPERS (CLEAN + OPTIMIZED)
 ================================================= */
 
 router.get("/my-papers", verifyToken, async (req, res) => {
   try {
-    const papers = await Paper.find({
-      uploadedBy: req.user._id,
-    }).sort({ createdAt: -1 });
+    const userId = req.user._id;
 
-    const approved = papers.filter((p) => p.status === "approved").length;
-    const pending = papers.filter((p) => p.status === "pending").length;
+    const papers = await Paper.find({ uploadedBy: userId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    let approved = 0;
+    let pending = 0;
+
+    papers.forEach((p) => {
+      if (p.status === "approved") approved++;
+      if (p.status === "pending") pending++;
+    });
 
     res.json({
+      success: true,
       papers,
       approved,
       pending,
@@ -161,7 +158,6 @@ router.get("/my-papers", verifyToken, async (req, res) => {
 
 /* =================================================
 UPDATE PROFILE
-PUT /api/users/update
 ================================================= */
 
 router.put("/update", verifyToken, async (req, res) => {
@@ -169,8 +165,6 @@ router.put("/update", verifyToken, async (req, res) => {
     let { name, password } = req.body;
 
     const updateData = {};
-
-    /* NAME UPDATE */
 
     if (name) {
       name = name.trim();
@@ -184,8 +178,6 @@ router.put("/update", verifyToken, async (req, res) => {
       updateData.name = name;
     }
 
-    /* PASSWORD UPDATE */
-
     if (password) {
       password = password.trim();
 
@@ -198,7 +190,7 @@ router.put("/update", verifyToken, async (req, res) => {
       updateData.password = await bcrypt.hash(password, 10);
     }
 
-    if (Object.keys(updateData).length === 0) {
+    if (!Object.keys(updateData).length) {
       return res.status(400).json({
         error: "Nothing to update",
       });
@@ -209,6 +201,7 @@ router.put("/update", verifyToken, async (req, res) => {
     }).select("-password");
 
     res.json({
+      success: true,
       message: "Profile updated successfully",
       user: updatedUser,
     });
@@ -222,8 +215,7 @@ router.put("/update", verifyToken, async (req, res) => {
 });
 
 /* =================================================
-DELETE OWN ACCOUNT
-DELETE /api/users/delete
+DELETE ACCOUNT (SAFE ADMIN CHECK)
 ================================================= */
 
 router.delete("/delete", verifyToken, async (req, res) => {
@@ -231,21 +223,15 @@ router.delete("/delete", verifyToken, async (req, res) => {
     const user = await User.findById(req.user._id);
 
     if (!user) {
-      return res.status(404).json({
-        error: "User not found",
-      });
+      return res.status(404).json({ error: "User not found" });
     }
 
-    /* PREVENT LAST ADMIN DELETE */
-
     if (user.role === "admin") {
-      const adminCount = await User.countDocuments({
-        role: "admin",
-      });
+      const adminCount = await User.countDocuments({ role: "admin" });
 
       if (adminCount <= 1) {
         return res.status(400).json({
-          error: "Cannot delete the last admin account",
+          error: "Cannot delete the last admin",
         });
       }
     }
@@ -253,6 +239,7 @@ router.delete("/delete", verifyToken, async (req, res) => {
     await User.findByIdAndDelete(req.user._id);
 
     res.json({
+      success: true,
       message: "Account deleted successfully",
     });
   } catch (error) {

@@ -8,25 +8,25 @@ import {
   useNavigate,
 } from "react-router-dom";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { Toaster } from "react-hot-toast";
 
-import { useAuth } from "./context/AuthContext";
+import useAuth from "./hooks/useAuth";
 
 /* ================= PAGES ================= */
 
-import Register from "./pages/Register";
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import Profile from "./pages/Profile";
-import Admin from "./pages/Admin";
-import Papers from "./pages/Papers";
-import AdminPending from "./pages/AdminPending";
-import PaperDetails from "./pages/PaperDetails";
-import Home from "./pages/Home";
-import MyPapers from "./pages/MyPapers";
-import Bookmarks from "./pages/Bookmarks";
-import UploadPaper from "./pages/UploadPaper";
+const Register = lazy(() => import("./pages/Register"));
+const Login = lazy(() => import("./pages/Login"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Profile = lazy(() => import("./pages/Profile"));
+const Admin = lazy(() => import("./pages/Admin"));
+const Papers = lazy(() => import("./pages/Papers"));
+const AdminPending = lazy(() => import("./pages/AdminPending"));
+const PaperDetails = lazy(() => import("./pages/PaperDetails"));
+const Home = lazy(() => import("./pages/Home"));
+const MyPapers = lazy(() => import("./pages/MyPapers"));
+const Bookmarks = lazy(() => import("./pages/Bookmarks"));
+const UploadPaper = lazy(() => import("./pages/UploadPaper"));
 
 /* ================= COMPONENTS ================= */
 
@@ -124,10 +124,6 @@ function Navbar() {
 
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
-
-  useEffect(() => {
-    setMobileMenu(false);
-  }, [location.pathname]);
 
   const hideDashboardLink = ["/login", "/register"].includes(location.pathname);
 
@@ -260,6 +256,14 @@ function Navbar() {
   );
 }
 
+function RouteFallback() {
+  return (
+    <div className="flex items-center justify-center py-16">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
+    </div>
+  );
+}
+
 /* ================= APP ================= */
 
 export default function App() {
@@ -274,102 +278,104 @@ export default function App() {
           <Navbar />
 
           <main className="max-w-6xl mx-auto p-6">
-            <Routes>
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute>
-                    <Home />
-                  </ProtectedRoute>
-                }
-              />
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
+                <Route
+                  path="/"
+                  element={
+                    <ProtectedRoute>
+                      <Home />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route path="/register" element={<Register />} />
-              <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/login" element={<Login />} />
 
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute>
-                    <Dashboard />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/dashboard"
+                  element={
+                    <ProtectedRoute>
+                      <Dashboard />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/profile"
-                element={
-                  <ProtectedRoute>
-                    <Profile />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/profile"
+                  element={
+                    <ProtectedRoute>
+                      <Profile />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/papers"
-                element={
-                  <ProtectedRoute>
-                    <Papers />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/papers"
+                  element={
+                    <ProtectedRoute>
+                      <Papers />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/my-papers"
-                element={
-                  <ProtectedRoute>
-                    <MyPapers />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/my-papers"
+                  element={
+                    <ProtectedRoute>
+                      <MyPapers />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/upload-paper"
-                element={
-                  <ProtectedRoute>
-                    <UploadPaper />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/upload-paper"
+                  element={
+                    <ProtectedRoute>
+                      <UploadPaper />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/bookmarks"
-                element={
-                  <ProtectedRoute>
-                    <Bookmarks />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/bookmarks"
+                  element={
+                    <ProtectedRoute>
+                      <Bookmarks />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/papers/:id"
-                element={
-                  <ProtectedRoute>
-                    <PaperDetails />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/papers/:id"
+                  element={
+                    <ProtectedRoute>
+                      <PaperDetails />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/admin"
-                element={
-                  <AdminRoute>
-                    <Admin />
-                  </AdminRoute>
-                }
-              />
+                <Route
+                  path="/admin"
+                  element={
+                    <AdminRoute>
+                      <Admin />
+                    </AdminRoute>
+                  }
+                />
 
-              <Route
-                path="/admin/pending"
-                element={
-                  <AdminRoute>
-                    <AdminPending />
-                  </AdminRoute>
-                }
-              />
+                <Route
+                  path="/admin/pending"
+                  element={
+                    <AdminRoute>
+                      <AdminPending />
+                    </AdminRoute>
+                  }
+                />
 
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
           </main>
         </div>
       </BrowserRouter>

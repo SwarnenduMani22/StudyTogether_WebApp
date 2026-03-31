@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { uploadPaper } from "../api/paper";
 import api from "../api/axios";
-import { useAuth } from "../context/AuthContext";
+import useAuth from "../hooks/useAuth";
 import toast from "react-hot-toast";
 
 const UploadPaper = () => {
@@ -14,8 +14,6 @@ const UploadPaper = () => {
 
   const [loading, setLoading] = useState(false);
 
-  /* ================= USER LIMIT ================= */
-
   const [limitReached, setLimitReached] = useState(false);
 
   const [stats, setStats] = useState({
@@ -24,7 +22,7 @@ const UploadPaper = () => {
     total: 0,
   });
 
-  /* ================= LOAD USER PAPERS ================= */
+  /* ================= LOAD USER STATS ================= */
 
   useEffect(() => {
     const loadUserStats = async () => {
@@ -35,46 +33,45 @@ const UploadPaper = () => {
 
         const approved = data.approved || 0;
         const pending = data.pending || 0;
-
         const total = approved + pending;
 
-        setStats({
-          approved,
-          pending,
-          total,
-        });
+        setStats({ approved, pending, total });
 
         if (user?.role !== "admin" && total >= 2) {
           setLimitReached(true);
         }
-      } catch (error) {
+      } catch {
         console.error("Failed to load user papers");
       }
     };
 
-    loadUserStats();
+    if (user) loadUserStats();
   }, [user]);
+
+  /* ================= NORMALIZE SUBJECT ================= */
+
+  const normalizeSubject = (value) => {
+    const map = {
+      "data structure": "Data Structure",
+      "operating system": "Operating System",
+      dbms: "DBMS",
+      "computer network": "Computer Network",
+      "software engineering": "Software Engineering",
+      "artificial intelligence": "Artificial Intelligence",
+    };
+
+    return map[value?.toLowerCase()] || value;
+  };
 
   /* ================= SUBMIT ================= */
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!title.trim()) {
-      return toast.error("Title required");
-    }
-
-    if (!subject) {
-      return toast.error("Select subject");
-    }
-
-    if (!semester) {
-      return toast.error("Select semester");
-    }
-
-    if (!file) {
-      return toast.error("PDF required");
-    }
+    if (!title.trim()) return toast.error("Title required");
+    if (!subject) return toast.error("Select subject");
+    if (!semester) return toast.error("Select semester");
+    if (!file) return toast.error("PDF required");
 
     if (limitReached && user?.role !== "admin") {
       return toast.error("Upload limit reached (max 2 papers)");
@@ -82,9 +79,9 @@ const UploadPaper = () => {
 
     const formData = new FormData();
 
-    formData.append("title", title);
-    formData.append("subject", subject);
-    formData.append("semester", semester);
+    formData.append("title", title.trim());
+    formData.append("subject", normalizeSubject(subject));
+    formData.append("semester", Number(semester));
     formData.append("pdf", file);
 
     try {
@@ -92,36 +89,41 @@ const UploadPaper = () => {
 
       await uploadPaper(formData);
 
-      if (user?.role === "admin") {
-        toast.success("Paper uploaded successfully ✅");
-      } else {
-        toast.success("Paper submitted for admin approval ⏳");
-      }
+      toast.success(
+        user?.role === "admin"
+          ? "Paper uploaded successfully ✅"
+          : "Paper submitted for admin approval ⏳",
+      );
 
-      /* reset form */
-
+      /* RESET FORM */
       setTitle("");
       setSubject("");
       setSemester("");
       setFile(null);
 
-      /* update stats */
-
+      /* UPDATE STATS */
       if (user?.role !== "admin") {
-        setStats((prev) => ({
-          ...prev,
-          pending: prev.pending + 1,
-          total: prev.total + 1,
-        }));
+        setStats((prev) => {
+          const newTotal = prev.total + 1;
+
+          if (newTotal >= 2) setLimitReached(true);
+
+          return {
+            ...prev,
+            pending: prev.pending + 1,
+            total: newTotal,
+          };
+        });
       }
     } catch (err) {
-      const message = err?.response?.data?.error;
+      const message = err?.message || "Upload failed";
 
-      if (message) {
-        toast.error(message);
-      } else {
-        toast.error("Upload failed. Try again.");
+      if (message.toLowerCase().includes("limit")) {
+        setLimitReached(true);
       }
+
+      toast.error(message);
+    } finally {
       setLoading(false);
     }
   };
@@ -130,7 +132,6 @@ const UploadPaper = () => {
     <div className="min-h-screen p-8">
       <div className="max-w-xl mx-auto card">
         {/* TITLE */}
-
         <h2 className="text-2xl font-bold mb-2">
           {user?.role === "admin" ? "Admin Upload Paper" : "Upload Paper"}
         </h2>
@@ -141,8 +142,7 @@ const UploadPaper = () => {
             : "Your upload will be reviewed by admin."}
         </p>
 
-        {/* USER STATS */}
-
+        {/* STATS */}
         {user?.role !== "admin" && (
           <div className="flex gap-4 text-sm mb-6">
             <span className="text-green-500">Approved: {stats.approved}</span>
@@ -151,19 +151,15 @@ const UploadPaper = () => {
           </div>
         )}
 
-        {/* LIMIT WARNING */}
-
+        {/* LIMIT */}
         {limitReached && user?.role !== "admin" && (
-          <div className="bg-red-100 text-red-600 p-3 rounded mb-6">
+          <div className="bg-red-100 text-red-600 p-3 rounded mb-6 text-center">
             Upload limit reached (Max 2 papers)
           </div>
         )}
 
         {/* FORM */}
-
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* TITLE */}
-
           <input
             className="input"
             placeholder="Paper Title"
@@ -171,8 +167,6 @@ const UploadPaper = () => {
             onChange={(e) => setTitle(e.target.value)}
             disabled={limitReached && user?.role !== "admin"}
           />
-
-          {/* SUBJECT */}
 
           <select
             className="input"
@@ -191,8 +185,6 @@ const UploadPaper = () => {
             </option>
           </select>
 
-          {/* SEMESTER */}
-
           <select
             className="input"
             value={semester}
@@ -200,17 +192,12 @@ const UploadPaper = () => {
             disabled={limitReached && user?.role !== "admin"}
           >
             <option value="">Select Semester</option>
-            <option value="1">Semester 1</option>
-            <option value="2">Semester 2</option>
-            <option value="3">Semester 3</option>
-            <option value="4">Semester 4</option>
-            <option value="5">Semester 5</option>
-            <option value="6">Semester 6</option>
-            <option value="7">Semester 7</option>
-            <option value="8">Semester 8</option>
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+              <option key={s} value={s}>
+                Semester {s}
+              </option>
+            ))}
           </select>
-
-          {/* FILE */}
 
           <input
             type="file"
@@ -218,8 +205,6 @@ const UploadPaper = () => {
             onChange={(e) => setFile(e.target.files[0])}
             disabled={limitReached && user?.role !== "admin"}
           />
-
-          {/* BUTTON */}
 
           <button
             disabled={loading || (limitReached && user?.role !== "admin")}

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import Skeleton from "../components/common/Skeleton";
-import { useAuth } from "../context/AuthContext";
+import useAuth from "../hooks/useAuth";
 import { getUserStats } from "../api/user";
 
 const Dashboard = () => {
@@ -22,7 +22,11 @@ const Dashboard = () => {
     const fetchStats = async () => {
       try {
         const data = await getUserStats();
-        setStats(data);
+        setStats({
+          uploaded: data?.total || 0,
+          approved: data?.approved || 0,
+          pending: data?.pending || 0,
+        });
       } catch (error) {
         console.error("Dashboard stats error:", error);
       } finally {
