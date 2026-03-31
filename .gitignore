@@ -1,7 +1,52 @@
+# =========================
+# Dependencies
+# =========================
 node_modules
 client/node_modules
 server/node_modules
+
+# =========================
+# Environment variables
+# =========================
 .env
-server/uploads
+.env.*
+!.env.example
+
+# =========================
+# Build outputs
+# =========================
 dist
 build
+client/dist
+
+# =========================
+# Logs
+# =========================
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Uploads (local storage)
+# =========================
+server/uploads
+
+# =========================
+# IDE / Editor files
+# =========================
+.vscode
+.idea
+*.swp
+*.swo
+
+# =========================
+# Optional
+# =========================
+coverage
