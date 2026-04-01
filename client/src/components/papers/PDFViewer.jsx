@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 
 /* ================= PDF WORKER FIX ================= */
@@ -15,6 +15,22 @@ const PDFViewer = ({ file }) => {
   const [scale, setScale] = useState(1.2);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const fileSource = useMemo(
+    () => ({
+      url: file,
+      withCredentials: false,
+    }),
+    [file],
+  );
+
+  useEffect(() => {
+    setNumPages(null);
+    setPageNumber(1);
+    setScale(1.2);
+    setLoading(true);
+    setError("");
+  }, [file]);
 
   /* ================= LOAD SUCCESS ================= */
 
@@ -56,7 +72,9 @@ const PDFViewer = ({ file }) => {
     <div className="flex flex-col items-center w-full">
       {/* LOADING */}
 
-      {loading && <p className="text-gray-500 mb-4">Loading PDF...</p>}
+      {loading && (
+        <p className="text-gray-500 dark:text-gray-300 mb-4">Loading PDF...</p>
+      )}
 
       {/* ERROR */}
 
@@ -68,33 +86,33 @@ const PDFViewer = ({ file }) => {
         <button
           disabled={pageNumber <= 1}
           onClick={prevPage}
-          className="bg-gray-300 hover:bg-gray-400 px-3 py-1 rounded disabled:opacity-50"
+          className="bg-gray-300 dark:bg-gray-700 dark:text-gray-100 hover:bg-gray-400 dark:hover:bg-gray-600 px-3 py-1 rounded disabled:opacity-50"
         >
           Prev
         </button>
 
-        <span className="text-gray-700">
+        <span className="text-gray-700 dark:text-gray-200">
           Page {pageNumber} / {numPages || "--"}
         </span>
 
         <button
           disabled={numPages && pageNumber >= numPages}
           onClick={nextPage}
-          className="bg-gray-300 hover:bg-gray-400 px-3 py-1 rounded disabled:opacity-50"
+          className="bg-gray-300 dark:bg-gray-700 dark:text-gray-100 hover:bg-gray-400 dark:hover:bg-gray-600 px-3 py-1 rounded disabled:opacity-50"
         >
           Next
         </button>
 
         <button
           onClick={zoomOut}
-          className="bg-gray-300 hover:bg-gray-400 px-3 py-1 rounded"
+          className="bg-gray-300 dark:bg-gray-700 dark:text-gray-100 hover:bg-gray-400 dark:hover:bg-gray-600 px-3 py-1 rounded"
         >
           -
         </button>
 
         <button
           onClick={zoomIn}
-          className="bg-gray-300 hover:bg-gray-400 px-3 py-1 rounded"
+          className="bg-gray-300 dark:bg-gray-700 dark:text-gray-100 hover:bg-gray-400 dark:hover:bg-gray-600 px-3 py-1 rounded"
         >
           +
         </button>
@@ -102,15 +120,24 @@ const PDFViewer = ({ file }) => {
 
       {/* PDF VIEW */}
 
-      <div className="overflow-auto border rounded-lg shadow max-h-[70vh]">
-        <Document
-          file={file}
-          onLoadSuccess={onLoadSuccess}
-          onLoadError={onLoadError}
-          loading=""
-        >
-          <Page pageNumber={pageNumber} scale={scale} />
-        </Document>
+      <div className="overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg shadow max-h-[70vh] w-full flex justify-center bg-white dark:bg-gray-900">
+        {!error ? (
+          <Document
+            file={fileSource}
+            onLoadSuccess={onLoadSuccess}
+            onLoadError={onLoadError}
+            onSourceError={onLoadError}
+            loading=""
+          >
+            <Page pageNumber={pageNumber} scale={scale} />
+          </Document>
+        ) : (
+          <iframe
+            src={file}
+            title="PDF preview fallback"
+            className="w-full h-[68vh]"
+          />
+        )}
       </div>
     </div>
   );

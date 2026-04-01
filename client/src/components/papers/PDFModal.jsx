@@ -1,12 +1,11 @@
 import { useEffect } from "react";
 import PDFViewer from "./PDFViewer";
+import resolvePdfUrl from "../../utils/resolvePdfUrl";
 
 const PDFModal = ({ pdfLink, onClose }) => {
   /* ================= SAFE PDF URL ================= */
 
-  const baseURL = import.meta.env.VITE_API_BASE || "http://localhost:5000";
-
-  const pdfUrl = pdfLink?.startsWith("http") ? pdfLink : `${baseURL}${pdfLink}`;
+  const pdfUrl = resolvePdfUrl(pdfLink);
 
   /* ================= ESC CLOSE ================= */
 
@@ -63,6 +62,7 @@ const PDFModal = ({ pdfLink, onClose }) => {
           <button
             onClick={onClose}
             className="text-lg text-gray-500 hover:text-red-500 transition"
+            aria-label="Close preview"
           >
             ✕
           </button>

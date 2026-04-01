@@ -11,6 +11,7 @@ import {
 import PDFModal from "./PDFModal";
 import useAuth from "../../hooks/useAuth";
 import toast from "react-hot-toast";
+import resolvePdfUrl from "../../utils/resolvePdfUrl";
 
 const PaperCard = ({ paper, onDelete }) => {
   const { user } = useAuth();
@@ -49,9 +50,7 @@ const PaperCard = ({ paper, onDelete }) => {
 
   /* ================= SAFE PDF URL ================= */
 
-  const pdfUrl = paper?.pdfLink?.startsWith("http")
-    ? paper.pdfLink
-    : `${import.meta.env.VITE_API_BASE || "http://localhost:5000"}${paper.pdfLink}`;
+  const pdfUrl = resolvePdfUrl(paper?.pdfLink);
 
   /* ================= PREVIEW ================= */
 

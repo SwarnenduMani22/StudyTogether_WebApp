@@ -6,6 +6,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import path from "path";
+import { fileURLToPath } from "url";
 // ❌ duplicate cors remove (ONLY THIS FIX)
 
 import errorHandler from "./middleware/errorMiddleware.js";
@@ -38,6 +39,24 @@ if (!process.env.JWT_SECRET) {
 
 app.set("trust proxy", 1);
 
+/* ================= CORS ================= */
+
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true,
+  }),
+);
+
+// ✅ handle preflight requests
+app.options(
+  "*",
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true,
+  }),
+);
+
 /* ================= SECURITY ================= */
 
 app.use(
@@ -60,31 +79,6 @@ const limiter = rateLimit({
 });
 
 app.use("/api/v1", limiter);
-
-/* ================= CORS ================= */
-
-const allowedOrigins = [
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-  process.env.CLIENT_URL,
-].filter(Boolean);
-
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      } else {
-        console.log("❌ Blocked by CORS:", origin);
-        return callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-  }),
-);
-
 /* ================= BODY PARSER ================= */
 
 app.use(express.json({ limit: "10mb" }));
@@ -96,7 +90,8 @@ app.use(morgan("dev"));
 
 /* ================= STATIC FILES ================= */
 
-const __dirname = path.resolve();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const uploadsPath = path.join(__dirname, "uploads");
 
 app.use("/uploads", express.static(uploadsPath));

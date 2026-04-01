@@ -2,6 +2,7 @@ import express from "express";
 import mongoose from "mongoose";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 
 import Paper from "../models/Paper.js";
 
@@ -10,6 +11,10 @@ import verifyAdmin from "../middleware/adminMiddleware.js";
 import { uploadMiddleware } from "../middleware/upload.js";
 
 const router = express.Router();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadsDir = path.join(__dirname, "..", "uploads");
 
 const SUBJECT_MAP = {
   dbms: "DBMS",
@@ -51,14 +56,18 @@ router.post("/upload", verifyToken, uploadMiddleware, async (req, res) => {
     }
 
     if (req.user.role !== "admin") {
-      const activeUploads = await Paper.countDocuments({
+      // ✅ count ONLY pending
+      const pendingUploads = await Paper.countDocuments({
         uploadedBy: req.user._id,
-        status: { $in: ["pending", "approved"] },
+        status: "pending",
       });
 
-      if (activeUploads >= 2) {
+      // ✅ remaining slots
+      const remainingSlots = 2 - pendingUploads;
+
+      if (remainingSlots <= 0) {
         return res.status(400).json({
-          error: "Upload limit reached. Max 2 papers allowed.",
+          error: "Upload limit reached (Max 2 pending papers allowed)",
         });
       }
     }
@@ -80,8 +89,7 @@ router.post("/upload", verifyToken, uploadMiddleware, async (req, res) => {
 
     const filename = req.file.filename;
 
-    const pdfLink = `${req.protocol}://${req.get("host")}/uploads/${filename}`;
-
+    const pdfLink = `/uploads/${filename}`;
     const status = req.user.role === "admin" ? "approved" : "pending";
 
     const paper = await Paper.create({
@@ -259,7 +267,7 @@ router.delete(
           const filename = paper.pdfLink.split("/uploads/")[1];
 
           if (filename) {
-            const filePath = path.join(process.cwd(), "uploads", filename);
+            const filePath = path.join(uploadsDir, filename);
 
             if (fs.existsSync(filePath)) {
               fs.unlinkSync(filePath);

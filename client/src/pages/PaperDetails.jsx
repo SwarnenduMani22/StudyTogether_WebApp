@@ -54,8 +54,9 @@ const PaperDetails = () => {
 
   /* ================= PDF URL ================= */
 
-  const pdfUrl = paper?.pdfLink || "";
+  const BASE_URL = "http://localhost:5000";
 
+  const pdfUrl = paper?.pdfLink ? `${BASE_URL}${paper.pdfLink}` : "";
   /* ================= PREVIEW ================= */
 
   const handlePreview = async () => {

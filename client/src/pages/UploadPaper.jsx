@@ -13,7 +13,6 @@ const UploadPaper = () => {
   const [file, setFile] = useState(null);
 
   const [loading, setLoading] = useState(false);
-
   const [limitReached, setLimitReached] = useState(false);
 
   const [stats, setStats] = useState({
@@ -33,19 +32,43 @@ const UploadPaper = () => {
 
         const approved = data.approved || 0;
         const pending = data.pending || 0;
-        const total = approved + pending;
 
-        setStats({ approved, pending, total });
+        setStats({
+          approved,
+          pending,
+          total: pending,
+        });
 
-        if (user?.role !== "admin" && total >= 2) {
-          setLimitReached(true);
-        }
+        setLimitReached(pending >= 2);
       } catch {
         console.error("Failed to load user papers");
       }
     };
 
     if (user) loadUserStats();
+  }, [user]);
+
+  /* ================= AUTO REFRESH (FIXED) ================= */
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (user) {
+        api.get("/users/my-papers").then((res) => {
+          const approved = res.data.approved || 0;
+          const pending = res.data.pending || 0;
+
+          setStats({
+            approved,
+            pending,
+            total: pending,
+          });
+
+          setLimitReached(pending >= 2);
+        });
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, [user]);
 
   /* ================= NORMALIZE SUBJECT ================= */
@@ -74,7 +97,7 @@ const UploadPaper = () => {
     if (!file) return toast.error("PDF required");
 
     if (limitReached && user?.role !== "admin") {
-      return toast.error("Upload limit reached (max 2 papers)");
+      return toast.error("Upload limit reached (max 2 pending papers)");
     }
 
     const formData = new FormData();
@@ -95,23 +118,21 @@ const UploadPaper = () => {
           : "Paper submitted for admin approval ⏳",
       );
 
-      /* RESET FORM */
       setTitle("");
       setSubject("");
       setSemester("");
       setFile(null);
 
-      /* UPDATE STATS */
       if (user?.role !== "admin") {
         setStats((prev) => {
-          const newTotal = prev.total + 1;
+          const newPending = prev.pending + 1;
 
-          if (newTotal >= 2) setLimitReached(true);
+          if (newPending >= 2) setLimitReached(true);
 
           return {
             ...prev,
-            pending: prev.pending + 1,
-            total: newTotal,
+            pending: newPending,
+            total: newPending,
           };
         });
       }
@@ -131,7 +152,6 @@ const UploadPaper = () => {
   return (
     <div className="min-h-screen p-8">
       <div className="max-w-xl mx-auto card">
-        {/* TITLE */}
         <h2 className="text-2xl font-bold mb-2">
           {user?.role === "admin" ? "Admin Upload Paper" : "Upload Paper"}
         </h2>
@@ -142,23 +162,26 @@ const UploadPaper = () => {
             : "Your upload will be reviewed by admin."}
         </p>
 
-        {/* STATS */}
         {user?.role !== "admin" && (
           <div className="flex gap-4 text-sm mb-6">
             <span className="text-green-500">Approved: {stats.approved}</span>
             <span className="text-yellow-500">Pending: {stats.pending}</span>
-            <span>Used: {stats.total} / 2</span>
+            <span>Used: {stats.pending} / 2</span>
           </div>
         )}
 
-        {/* LIMIT */}
+        {user?.role !== "admin" && (
+          <p className="text-green-400 mb-4 text-sm">
+            You can upload {Math.max(2 - stats.pending, 0)} more paper(s)
+          </p>
+        )}
+
         {limitReached && user?.role !== "admin" && (
           <div className="bg-red-100 text-red-600 p-3 rounded mb-6 text-center">
-            Upload limit reached (Max 2 papers)
+            Upload limit reached (Max 2 pending papers)
           </div>
         )}
 
-        {/* FORM */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <input
             className="input"

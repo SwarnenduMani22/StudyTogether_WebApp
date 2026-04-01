@@ -2,10 +2,13 @@ import multer from "multer";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { fileURLToPath } from "url";
 
 /* ================= UPLOAD DIRECTORY ================= */
 
-const uploadDir = path.join(process.cwd(), "uploads");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadDir = path.join(__dirname, "..", "uploads");
 
 /* Ensure uploads directory exists */
 
