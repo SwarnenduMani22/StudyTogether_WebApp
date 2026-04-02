@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+
 import {
   incrementView,
   incrementDownload,
@@ -15,6 +17,7 @@ import resolvePdfUrl from "../../utils/resolvePdfUrl";
 
 const PaperCard = ({ paper, onDelete }) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const [preview, setPreview] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -52,9 +55,22 @@ const PaperCard = ({ paper, onDelete }) => {
 
   const pdfUrl = resolvePdfUrl(paper?.pdfLink);
 
+  /* ================= AUTH CHECK ================= */
+
+  const requireLogin = () => {
+    if (!user) {
+      toast.error("Please login first 🔒");
+      navigate("/login");
+      return false;
+    }
+    return true;
+  };
+
   /* ================= PREVIEW ================= */
 
   const handlePreview = async () => {
+    if (!requireLogin()) return;
+
     try {
       setPreviewLoading(true);
 
@@ -72,11 +88,15 @@ const PaperCard = ({ paper, onDelete }) => {
   /* ================= DOWNLOAD ================= */
 
   const handleDownload = async () => {
+    if (!requireLogin()) return;
+
     try {
       await incrementDownload(paper._id);
       setDownloads((prev) => prev + 1);
+
+      window.open(pdfUrl, "_blank");
     } catch (error) {
-      console.error("Download counter failed:", error);
+      console.error("Download failed:", error);
     }
   };
 
@@ -94,7 +114,7 @@ const PaperCard = ({ paper, onDelete }) => {
 
       toast.success("Paper deleted successfully");
 
-      if (onDelete) onDelete(); // 🔥 UI refresh
+      if (onDelete) onDelete();
     } catch {
       toast.error("Failed to delete paper");
     } finally {
@@ -126,10 +146,7 @@ const PaperCard = ({ paper, onDelete }) => {
   /* ================= RATING ================= */
 
   const handleRating = async (value) => {
-    if (!user) {
-      toast.error("Login required");
-      return;
-    }
+    if (!requireLogin()) return;
 
     if (hasRated) {
       toast.error("You already rated this paper");
@@ -154,10 +171,7 @@ const PaperCard = ({ paper, onDelete }) => {
   /* ================= BOOKMARK ================= */
 
   const handleBookmark = async () => {
-    if (!user) {
-      toast.error("Login required");
-      return;
-    }
+    if (!requireLogin()) return;
 
     try {
       const res = await toggleBookmark(paper._id);
@@ -175,30 +189,23 @@ const PaperCard = ({ paper, onDelete }) => {
   return (
     <>
       <div className="card hover:shadow-xl transition duration-200">
-        {/* TITLE */}
         <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
           {paper.title}
         </h3>
 
-        {/* SUBJECT */}
         <p className="text-sm text-gray-500 mt-2">📚 {paper.subject}</p>
-
-        {/* SEMESTER */}
         <p className="text-sm text-gray-500">🎓 Semester {paper.semester}</p>
 
-        {/* UPLOADER */}
         {paper.uploadedBy?.name && (
           <p className="text-xs text-gray-400 mt-1">
             Uploaded by: {paper.uploadedBy.name}
           </p>
         )}
 
-        {/* RATING */}
         <div className="mt-2 text-yellow-500 font-semibold text-sm">
           ⭐ {avgRating} / 5
         </div>
 
-        {/* STATS */}
         <div className="flex gap-4 text-xs text-gray-400 mt-3">
           <span>👁 {views}</span>
           <span>⬇ {downloads}</span>
@@ -211,18 +218,19 @@ const PaperCard = ({ paper, onDelete }) => {
             disabled={previewLoading}
             className="bg-indigo-600 text-white px-3 py-1 rounded text-sm"
           >
-            {previewLoading ? "Loading..." : "Preview"}
+            {previewLoading
+              ? "Loading..."
+              : user
+                ? "Preview"
+                : "Login to Preview 🔒"}
           </button>
 
-          <a
-            href={pdfUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
             onClick={handleDownload}
             className="bg-green-500 text-white px-3 py-1 rounded text-sm"
           >
-            Download
-          </a>
+            {user ? "Download" : "Login to Download 🔒"}
+          </button>
 
           <button
             onClick={handleBookmark}
@@ -310,7 +318,6 @@ const PaperCard = ({ paper, onDelete }) => {
         </div>
       )}
 
-      {/* PDF */}
       {preview && (
         <PDFModal pdfLink={pdfUrl} onClose={() => setPreview(false)} />
       )}

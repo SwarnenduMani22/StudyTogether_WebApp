@@ -24,7 +24,7 @@ router.post("/bookmark/:id", verifyToken, async (req, res) => {
     const paper = await Paper.findById(paperId);
 
     if (!paper) {
-      return res.status(404).json({ error: "Paper not found" });
+      return res.status(404).json({ success: false, error: "Paper not found" });
     }
 
     const user = await User.findById(req.user._id);

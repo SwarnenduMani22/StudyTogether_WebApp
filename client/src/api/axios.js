@@ -2,7 +2,7 @@ import axios from "axios";
 
 /* ================= BASE URL ================= */
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
+const BASE_URL = import.meta.env.VITE_API_URL;
 
 /* ================= AXIOS INSTANCE ================= */
 
@@ -19,7 +19,8 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     try {
-      const token = localStorage.getItem("token");
+      const token = sessionStorage.getItem("accessToken");
+
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -38,7 +39,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
 
-  (error) => {
+  async (error) => {
     const status = error.response?.status;
 
     const message =
@@ -47,14 +48,33 @@ api.interceptors.response.use(
       error.message ||
       "Unknown error";
 
-    /* ================= UNAUTHORIZED ================= */
+    /* ================= REFRESH TOKEN LOGIC ================= */
 
-    if (status === 401) {
-      sessionStorage.removeItem("token");
-      sessionStorage.removeItem("user");
+    if (status === 401 && !error.config._retry) {
+      error.config._retry = true;
 
-      if (window.location.pathname !== "/login") {
+      try {
+        const refreshToken = sessionStorage.getItem("refreshToken");
+
+        if (!refreshToken) throw new Error("No refresh token");
+
+        const res = await axios.post(`${BASE_URL}/auth/refresh`, {
+          refreshToken,
+        });
+
+        const newAccessToken = res.data.accessToken;
+
+        sessionStorage.setItem("accessToken", newAccessToken);
+
+        error.config.headers.Authorization = `Bearer ${newAccessToken}`;
+
+        return api(error.config);
+      } catch (err) {
+        console.error("Refresh token failed:", err);
+
+        sessionStorage.clear();
         window.location.href = "/login";
+        return Promise.reject(err);
       }
     }
 
@@ -69,9 +89,6 @@ api.interceptors.response.use(
     if (!error.response) {
       console.error("Network error: backend may be offline");
     }
-
-    /* ================= IMPORTANT FIX ================= */
-    /* keeps axios original error usable */
 
     error.message = message;
     error.status = status;

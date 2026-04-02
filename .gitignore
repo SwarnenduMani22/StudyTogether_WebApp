@@ -66,3 +66,12 @@ coverage
 *.tmp
 *.temp
 .cache
+
+# Vercel
+.vercel
+
+# Render / deployment temp
+.render
+
+# Mac hidden
+._*

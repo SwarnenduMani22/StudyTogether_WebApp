@@ -18,10 +18,22 @@ export const loginUser = async (credentials) => {
   try {
     const res = await api.post("/auth/login", credentials);
 
-    const { token, user } = res.data;
+    // 🔥 FIXED: correct destructuring
+    const {
+      accessToken,
+      refreshToken,
+      user,
+      token, // fallback (keep your original structure safe)
+    } = res.data;
 
-    if (token) {
-      sessionStorage.setItem("token", token);
+    // 🔥 FIXED: support both token & accessToken
+    if (accessToken || token) {
+      sessionStorage.setItem("accessToken", accessToken || token);
+
+      if (refreshToken) {
+        sessionStorage.setItem("refreshToken", refreshToken);
+      }
+
       sessionStorage.setItem("user", JSON.stringify(user));
     }
 
@@ -33,9 +45,22 @@ export const loginUser = async (credentials) => {
 
 /* ================= LOGOUT ================= */
 
-export const logoutUser = () => {
-  sessionStorage.removeItem("token");
-  sessionStorage.removeItem("user");
+export const logout = async () => {
+  try {
+    await api.post("/auth/logout"); // 🔥 backend call
+  } catch (error) {
+    console.error("Logout API error:", error);
+  }
+
+  // 🔥 FIXED: avoid crash if not defined
+  try {
+    if (typeof setUser === "function") setUser(null);
+    if (typeof setToken === "function") setToken(null);
+  } catch {}
+
+  sessionStorage.clear(); // 🔥 better
+
+  delete api.defaults.headers.common["Authorization"];
 
   window.location.href = "/login";
 };

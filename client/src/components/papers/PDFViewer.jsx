@@ -3,7 +3,7 @@ import { Document, Page, pdfjs } from "react-pdf";
 
 /* ================= PDF WORKER FIX ================= */
 
-// ✅ CDN issue avoid (BEST for Vite)
+// ✅ Vite-safe worker
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
   import.meta.url,
@@ -16,12 +16,29 @@ const PDFViewer = ({ file }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  /* ================= FIX: CLOUDINARY URL TRANSFORM ================= */
+
+  const safeFile = useMemo(() => {
+    if (!file) return "";
+
+    let url = file;
+
+    // ✅ Fix Cloudinary raw → inline preview
+    if (url.includes("res.cloudinary.com")) {
+      url = url
+        .replace("/upload/", "/upload/fl_attachment:false/")
+        .replace("/raw/upload/", "/image/upload/");
+    }
+
+    return url;
+  }, [file]);
+
   const fileSource = useMemo(
     () => ({
-      url: file,
+      url: safeFile,
       withCredentials: false,
     }),
-    [file],
+    [safeFile],
   );
 
   useEffect(() => {
@@ -30,7 +47,7 @@ const PDFViewer = ({ file }) => {
     setScale(1.2);
     setLoading(true);
     setError("");
-  }, [file]);
+  }, [safeFile]);
 
   /* ================= LOAD SUCCESS ================= */
 
@@ -71,17 +88,14 @@ const PDFViewer = ({ file }) => {
   return (
     <div className="flex flex-col items-center w-full">
       {/* LOADING */}
-
       {loading && (
         <p className="text-gray-500 dark:text-gray-300 mb-4">Loading PDF...</p>
       )}
 
       {/* ERROR */}
-
       {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
 
       {/* CONTROLS */}
-
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <button
           disabled={pageNumber <= 1}
@@ -119,7 +133,6 @@ const PDFViewer = ({ file }) => {
       </div>
 
       {/* PDF VIEW */}
-
       <div className="overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg shadow max-h-[70vh] w-full flex justify-center bg-white dark:bg-gray-900">
         {!error ? (
           <Document
@@ -133,7 +146,7 @@ const PDFViewer = ({ file }) => {
           </Document>
         ) : (
           <iframe
-            src={file}
+            src={safeFile}
             title="PDF preview fallback"
             className="w-full h-[68vh]"
           />

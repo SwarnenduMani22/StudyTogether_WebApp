@@ -69,6 +69,7 @@ router.post("/register", async (req, res) => {
     /* ---------- RESPONSE ---------- */
 
     res.status(201).json({
+      success: true,
       message: "User registered successfully",
       user: user.toSafeObject(),
     });
@@ -76,6 +77,7 @@ router.post("/register", async (req, res) => {
     console.error("❌ Register error:", error);
 
     res.status(500).json({
+      success: false,
       error: "Server error during registration",
     });
   }
@@ -119,31 +121,130 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    /* ---------- GENERATE JWT TOKEN ---------- */
+    /* ---------- GENERATE TOKENS ---------- */
 
-    const token = jwt.sign(
+    const accessToken = jwt.sign(
       {
         id: user._id,
         role: user.role,
+        email: user.email, // 🔥 add
       },
       process.env.JWT_SECRET,
+      { expiresIn: "15m" },
+    );
+
+    const refreshToken = jwt.sign(
       {
-        expiresIn: "1d",
+        id: user._id,
+        tokenType: "refresh", // 🔥 added
+      },
+      process.env.JWT_REFRESH_SECRET, // 🔥 FIXED (separate secret)
+      {
+        expiresIn: "7d",
       },
     );
 
     /* ---------- RESPONSE ---------- */
 
     res.json({
+      success: true,
       message: "Login successful",
-      token,
+      accessToken,
+      refreshToken,
       user: user.toSafeObject(),
     });
   } catch (error) {
     console.error("❌ Login error:", error);
 
     res.status(500).json({
+      success: false,
       error: "Server error during login",
+    });
+  }
+});
+
+/* =================================================
+REFRESH TOKEN
+================================================= */
+
+router.post("/refresh", async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    /* ---------- VALIDATION ---------- */
+
+    if (!refreshToken) {
+      return res.status(401).json({
+        error: "Refresh token missing",
+      });
+    }
+
+    /* ---------- VERIFY ---------- */
+
+    let decoded;
+
+    try {
+      decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    } catch {
+      return res.status(401).json({
+        error: "Invalid or expired refresh token",
+      });
+    }
+
+    /* ---------- USER CHECK ---------- */
+
+    const user = await User.findById(decoded.id).select("_id role");
+
+    if (!user) {
+      return res.status(404).json({
+        error: "User not found",
+      });
+    }
+
+    /* ---------- NEW ACCESS TOKEN ---------- */
+
+    const newAccessToken = jwt.sign(
+      {
+        id: user._id,
+        role: user.role,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "15m",
+      },
+    );
+
+    res.json({
+      success: true,
+      accessToken: newAccessToken,
+    });
+  } catch (error) {
+    console.error("❌ Refresh error:", error);
+
+    res.status(500).json({
+      error: "Failed to refresh token",
+    });
+  }
+});
+
+/* =================================================
+LOGOUT
+================================================= */
+
+router.post("/logout", async (req, res) => {
+  try {
+    // future: blacklist token / DB remove
+
+    res.json({
+      success: true,
+      message: "Logged out successfully",
+    });
+  } catch (error) {
+    console.error("Logout error:", error);
+
+    res.status(500).json({
+      success: false,
+      error: "Logout failed",
     });
   }
 });

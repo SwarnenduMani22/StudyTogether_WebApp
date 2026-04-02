@@ -1,7 +1,8 @@
+import dotenv from "dotenv";
+dotenv.config({ path: "./.env" });
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
-import dotenv from "dotenv";
 import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
@@ -18,8 +19,6 @@ import userRoutes from "./routes/user.js";
 import adminRoutes from "./routes/admin.js";
 import paperRoutes from "./routes/paper.js";
 import adminStatsRoutes from "./routes/adminStats.js";
-
-dotenv.config();
 
 const app = express();
 
@@ -43,16 +42,7 @@ app.set("trust proxy", 1);
 
 app.use(
   cors({
-    origin: "http://localhost:5173",
-    credentials: true,
-  }),
-);
-
-// ✅ handle preflight requests
-app.options(
-  "*",
-  cors({
-    origin: "http://localhost:5173",
+    origin: process.env.CLIENT_URL,
     credentials: true,
   }),
 );

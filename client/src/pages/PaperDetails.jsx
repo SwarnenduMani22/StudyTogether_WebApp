@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import { getPaper, incrementView, incrementDownload } from "../api/paper";
-
+import resolvePdfUrl from "../utils/resolvePdfUrl";
 import PDFModal from "../components/papers/PDFModal";
 import Skeleton from "../components/common/Skeleton";
 
@@ -54,9 +54,7 @@ const PaperDetails = () => {
 
   /* ================= PDF URL ================= */
 
-  const BASE_URL = "http://localhost:5000";
-
-  const pdfUrl = paper?.pdfLink ? `${BASE_URL}${paper.pdfLink}` : "";
+  const pdfUrl = resolvePdfUrl(paper?.pdfLink);
   /* ================= PREVIEW ================= */
 
   const handlePreview = async () => {

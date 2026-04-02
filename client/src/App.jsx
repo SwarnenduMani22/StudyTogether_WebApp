@@ -280,14 +280,7 @@ export default function App() {
           <main className="max-w-6xl mx-auto p-6">
             <Suspense fallback={<RouteFallback />}>
               <Routes>
-                <Route
-                  path="/"
-                  element={
-                    <ProtectedRoute>
-                      <Home />
-                    </ProtectedRoute>
-                  }
-                />
+                <Route path="/" element={<Home />} />
 
                 <Route path="/register" element={<Register />} />
                 <Route path="/login" element={<Login />} />

@@ -1,11 +1,29 @@
-import { useEffect } from "react";
+import { pdfjs } from "react-pdf";
+
+/* ✅ FIX 1: worker properly load */
+pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+
+import { useEffect, useMemo } from "react";
 import PDFViewer from "./PDFViewer";
 import resolvePdfUrl from "../../utils/resolvePdfUrl";
 
 const PDFModal = ({ pdfLink, onClose }) => {
   /* ================= SAFE PDF URL ================= */
 
-  const pdfUrl = resolvePdfUrl(pdfLink);
+  const pdfUrl = useMemo(() => {
+    let resolved = resolvePdfUrl(pdfLink);
+
+    if (!resolved) return "";
+
+    /* 🔥 FINAL FIX: FORCE INLINE (IMPORTANT) */
+    if (resolved.includes("res.cloudinary.com")) {
+      resolved = resolved
+        .replace("/upload/", "/upload/fl_attachment:false/")
+        .replace("/raw/upload/", "/image/upload/");
+    }
+
+    return resolved;
+  }, [pdfLink]);
 
   /* ================= ESC CLOSE ================= */
 
@@ -46,14 +64,10 @@ const PDFModal = ({ pdfLink, onClose }) => {
       role="dialog"
       aria-modal="true"
     >
-      {/* MODAL */}
-
       <div
         className="bg-white dark:bg-gray-900 w-full md:w-5/6 h-[90vh] rounded-xl shadow-2xl overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* HEADER */}
-
         <div className="flex items-center justify-between px-5 py-3 border-b dark:border-gray-700">
           <h2 className="font-semibold text-gray-800 dark:text-white">
             Paper Preview
@@ -62,19 +76,14 @@ const PDFModal = ({ pdfLink, onClose }) => {
           <button
             onClick={onClose}
             className="text-lg text-gray-500 hover:text-red-500 transition"
-            aria-label="Close preview"
           >
             ✕
           </button>
         </div>
 
-        {/* PDF VIEWER */}
-
         <div className="flex-1 overflow-auto flex items-center justify-center p-4">
           <PDFViewer file={pdfUrl} />
         </div>
-
-        {/* FALLBACK */}
 
         <div className="text-center pb-4">
           <a

@@ -45,13 +45,17 @@ const Login = () => {
       });
 
       const user = res?.data?.user;
-      const token = res?.data?.token;
+      const accessToken = res?.data?.accessToken;
+      const refreshToken = res?.data?.refreshToken;
 
-      if (!user || !token) {
+      if (!user || !accessToken) {
         throw new Error("Invalid server response");
       }
 
-      login(user, token);
+      login(user, accessToken); // context login
+
+      // 🔥 IMPORTANT
+      sessionStorage.setItem("refreshToken", refreshToken);
 
       toast.success("Login successful 🎉");
 
