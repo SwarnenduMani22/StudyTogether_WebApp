@@ -6,8 +6,8 @@ A modern **full-stack MERN-style web application** for students to **upload, exp
 
 # 🚀 Live Demo (Add after deploy)
 
-- 🌐 Frontend: `https://your-app.vercel.app`
-- 🔗 Backend API: `https://your-app.onrender.com/api/v1`
+- 🌐 Frontend: `[https://your-app.vercel.app](https://study-together-web-app.vercel.app/)`
+- 🔗 Backend API: `[https://your-app.onrender.com/api/v1](https://studytogether-backend-xt0f.onrender.com/api/v1/health)`
 
 ---
 
