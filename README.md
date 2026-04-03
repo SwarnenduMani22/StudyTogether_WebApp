@@ -1,13 +1,13 @@
-# 📚 StudyTogether – Full Stack Web App
+# 📚 StudyTogether – Full Stack MERN Web App
 
-A modern **full-stack MERN-style web application** for students to **upload, explore, and manage study papers** with authentication, admin moderation, and real-time engagement features.
+A modern **production-ready full-stack web application** where students can **upload, discover, and manage study materials (PDFs)** with secure authentication, admin moderation, and real-time engagement features.
 
 ---
 
-# 🚀 Live Demo (Add after deploy)
+# 🚀 Live Demo
 
-- 🌐 Frontend: `[https://your-app.vercel.app](https://study-together-web-app.vercel.app/)`
-- 🔗 Backend API: `[https://your-app.onrender.com/api/v1](https://studytogether-backend-xt0f.onrender.com/api/v1/health)`
+- 🌐 **Frontend:** [https://study-together-web-app.vercel.app](https://study-together-web-app.vercel.app)
+- 🔗 **Backend API:** [https://studytogether-backend-xt0f.onrender.com/api/v1/health](https://studytogether-backend-xt0f.onrender.com/api/v1/health)
 
 ---
 
@@ -15,75 +15,76 @@ A modern **full-stack MERN-style web application** for students to **upload, exp
 
 ## 🌐 Frontend
 
-- **React.js (Vite)**
-- **Tailwind CSS**
-- **React Router**
-- **Axios**
+- React.js (Vite)
+- Tailwind CSS
+- React Router DOM
+- Axios
 
 ## ⚙️ Backend
 
-- **Node.js**
-- **Express.js**
-- **MongoDB (Mongoose)**
+- Node.js
+- Express.js
+- MongoDB (Mongoose)
 
 ## 🔐 Authentication & Security
 
-- **JWT (Access + Refresh Token)**
-- **Helmet**
-- **Rate Limiting**
-- **CORS**
+- JWT (Access + Refresh Tokens)
+- Helmet (Security headers)
+- Express Rate Limiting
+- CORS Protection
 
-## 📁 File Handling
+## ☁️ File Storage
 
-- **Multer**
-- **Cloudinary (PDF Storage)**
+- Multer (Upload handling)
+- Cloudinary (PDF storage & delivery)
 
 ---
 
-# ✨ Features
+# ✨ Core Features
 
-## 🔐 Authentication
+## 🔐 Authentication System
 
 - User Registration & Login
-- Secure JWT Authentication
-- Token Refresh System
+- JWT-based Authentication
+- Refresh Token Mechanism
 
-## 👤 User System
+## 👤 User Features
 
 - Profile Management
 - Bookmark Papers
-- Upload Papers (User/Admin)
+- Upload Papers (User & Admin)
 
-## 📄 Study Papers
+## 📄 Paper Management
 
 - Upload PDF Files (Cloudinary)
 - Search & Filter (Subject, Semester)
 - Pagination
-- Preview & Download Papers
+- PDF Preview (React-PDF)
+- Download Papers
 
 ## ⭐ Engagement System
 
-- View Count Tracking
-- Download Count Tracking
+- View Counter
+- Download Counter
 - Rating System (1–5 ⭐)
-- Trending Papers
+- Trending Papers Algorithm
 
 ## 🛡 Admin Panel
 
 - Approve / Reject Papers
-- Delete Papers (Cloudinary + DB sync)
+- Delete Papers (DB + Cloudinary sync)
 - Manage Users
-- Admin Statistics
+- View Platform Analytics
 
 ---
 
-# 🧠 Smart Features
+# 🧠 Smart System Design
 
 - Duplicate Paper Detection
-- Upload Limit (Max 2 pending papers for users)
-- Role-Based Access Control (Admin/User)
+- Upload Limit (Max 2 pending papers per user)
+- Role-Based Access Control (RBAC)
 - Secure File Validation (PDF only + size limit)
-- Clean Error Handling System
+- Centralized Error Handling
 
 ---
 
@@ -92,13 +93,13 @@ A modern **full-stack MERN-style web application** for students to **upload, exp
 ```bash
 StudyTogether/
 │
-├── client/                 # Frontend (React + Vite)
+├── client/                 # React Frontend (Vite)
 │   ├── src/
-│   ├── pages/
 │   ├── components/
+│   ├── pages/
 │   └── package.json
 │
-├── server/                 # Backend (Node + Express)
+├── server/                 # Node + Express Backend
 │   ├── models/
 │   ├── routes/
 │   ├── middleware/
@@ -119,8 +120,10 @@ StudyTogether/
 ```env
 PORT=5000
 MONGODB_URI=your_mongodb_uri
+
 JWT_SECRET=your_secret
 JWT_REFRESH_SECRET=your_refresh_secret
+
 CLIENT_URL=http://localhost:5173
 
 CLOUD_NAME=your_cloudinary_name
@@ -153,11 +156,11 @@ VITE_API_URL=http://localhost:5000/api/v1
 
 # 🚀 Installation & Setup
 
-## 🔧 Clone Repo
+## 🔧 Clone Repository
 
 ```bash
-git clone https://github.com/your-username/StudyTogether.git
-cd StudyTogether
+git clone https://github.com/SwarnenduMani22/StudyTogether_WebApp.git
+cd StudyTogether_WebApp
 ```
 
 ---
@@ -186,24 +189,24 @@ npm run dev
 
 ## 🔹 Backend (Render)
 
-- Set root directory: `server`
-- Add environment variables
-- Deploy 🚀
+- Root Directory: `server`
+- Add Environment Variables
+- Deploy
 
 ## 🔹 Frontend (Vercel)
 
-- Set root directory: `client`
+- Root Directory: `client`
 - Add `VITE_API_URL`
-- Deploy 🚀
+- Deploy
 
 ---
 
-# 📸 Screenshots (Add later)
+# 📸 Screenshots (Coming Soon)
 
 - Home Page
-- Paper Listing
-- Admin Panel
-- Upload Page
+- Papers Listing
+- Admin Dashboard
+- Upload Interface
 
 ---
 
@@ -217,20 +220,19 @@ npm run dev
 
 # 🎯 Future Improvements
 
-- 🔔 Notifications system
-- 💬 Comments on papers
-- 📱 Mobile optimization
-- 🌍 Multi-language support
+- 🔔 Notification System
+- 💬 Comments & Discussion
+- 📱 Mobile Optimization
+- 🌍 Multi-language Support
 
 ---
 
-# ⭐ Final Note
+# ⭐ Final Thoughts
 
 This project demonstrates:
 
-💼 Full-stack development
-🔐 Secure authentication
-📁 File handling & cloud integration
-🛡 Production-ready backend architecture
-
----
+✔ Full-stack MERN development
+✔ Secure authentication system
+✔ Cloud file handling (Cloudinary)
+✔ Scalable backend architecture
+✔ Production deployment (Vercel + Render)
