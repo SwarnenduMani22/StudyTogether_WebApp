@@ -107,7 +107,7 @@ router.post("/upload", verifyToken, (req, res) => {
           error: "This paper already exists",
         });
       }
-      const pdfLink = req.file.path;
+      const pdfLink = req.file.path.replace("/image/upload/", "/raw/upload/");
       const status = req.user.role === "admin" ? "approved" : "pending";
 
       const paper = await Paper.create({

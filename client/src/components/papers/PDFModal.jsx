@@ -1,8 +1,3 @@
-import { pdfjs } from "react-pdf";
-
-/* ✅ FIX 1: worker properly load */
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
-
 import { useEffect, useMemo } from "react";
 import PDFViewer from "./PDFViewer";
 import resolvePdfUrl from "../../utils/resolvePdfUrl";
@@ -11,20 +6,11 @@ const PDFModal = ({ pdfLink, onClose }) => {
   /* ================= SAFE PDF URL ================= */
 
   const pdfUrl = useMemo(() => {
-    let resolved = resolvePdfUrl(pdfLink);
+    if (!pdfLink) return "";
 
-    if (!resolved) return "";
-
-    /* 🔥 FINAL FIX: FORCE INLINE (IMPORTANT) */
-    if (resolved.includes("res.cloudinary.com")) {
-      resolved = resolved
-        .replace("/upload/", "/upload/fl_attachment:false/")
-        .replace("/raw/upload/", "/image/upload/");
-    }
-
-    return resolved;
+    return resolvePdfUrl(pdfLink); // ✅ clean & correct
   }, [pdfLink]);
-
+  console.log(pdfUrl);
   /* ================= ESC CLOSE ================= */
 
   useEffect(() => {

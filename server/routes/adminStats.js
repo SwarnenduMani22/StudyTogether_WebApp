@@ -26,8 +26,7 @@ router.get("/stats", verifyToken, verifyAdmin, async (req, res) => {
       totalViews,
       totalDownloads,
     ] = await Promise.all([
-      User.countDocuments(),
-
+      User.countDocuments({ role: { $ne: "admin" } }),
       User.countDocuments({ role: "admin" }),
 
       Paper.countDocuments(),

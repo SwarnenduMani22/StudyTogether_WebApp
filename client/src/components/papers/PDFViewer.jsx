@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 
-/* ================= PDF WORKER FIX ================= */
-
-// ✅ Vite-safe worker
+/* ✅ FINAL WORKER (V5 COMPATIBLE) */
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
   import.meta.url,
@@ -20,27 +18,9 @@ const PDFViewer = ({ file }) => {
 
   const safeFile = useMemo(() => {
     if (!file) return "";
-
-    let url = file;
-
-    // ✅ Fix Cloudinary raw → inline preview
-    if (url.includes("res.cloudinary.com")) {
-      url = url
-        .replace("/upload/", "/upload/fl_attachment:false/")
-        .replace("/raw/upload/", "/image/upload/");
-    }
-
-    return url;
+    return file;
   }, [file]);
-
-  const fileSource = useMemo(
-    () => ({
-      url: safeFile,
-      withCredentials: false,
-    }),
-    [safeFile],
-  );
-
+  console.log("Viewer file 👉", file);
   useEffect(() => {
     setNumPages(null);
     setPageNumber(1);
@@ -136,7 +116,7 @@ const PDFViewer = ({ file }) => {
       <div className="overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg shadow max-h-[70vh] w-full flex justify-center bg-white dark:bg-gray-900">
         {!error ? (
           <Document
-            file={fileSource}
+            file={safeFile} // ✅ FIXED (direct URL only)
             onLoadSuccess={onLoadSuccess}
             onLoadError={onLoadError}
             onSourceError={onLoadError}
