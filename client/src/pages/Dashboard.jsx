@@ -30,9 +30,7 @@ const Dashboard = () => {
       } catch (error) {
         console.error("Dashboard stats error:", error);
       } finally {
-        setTimeout(() => {
-          setLoading(false);
-        }, 500);
+        setLoading(false);
       }
     };
 
@@ -64,7 +62,7 @@ const Dashboard = () => {
 
       <div className="mb-10 fade-in">
         <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
-          Welcome, {user?.name} 👋
+          Welcome, {user?.name || "Student"} 👋
         </h1>
 
         <p className="text-gray-500 dark:text-gray-400 mt-2">

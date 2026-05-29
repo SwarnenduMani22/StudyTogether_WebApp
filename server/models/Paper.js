@@ -38,6 +38,7 @@ const paperSchema = new mongoose.Schema(
       type: String,
       required: [true, "PDF link is required"],
       trim: true,
+      match: [/^https?:\/\/.+/, "Invalid PDF URL"],
     },
 
     uploadedBy: {
@@ -90,7 +91,29 @@ const paperSchema = new mongoose.Schema(
       ],
       default: [],
     },
+    /* ================= COMMENTS ================= */
 
+    comments: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+
+        text: {
+          type: String,
+          required: true,
+          trim: true,
+          maxlength: 500,
+        },
+
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     /* ================= ACTIVE FLAG ================= */
 
     isActive: {
@@ -128,8 +151,9 @@ paperSchema.index({ title: 1, subject: 1, semester: 1 }, { unique: true });
 /* Popularity Score */
 
 paperSchema.virtual("popularityScore").get(function () {
-  const ratingScore = this.ratings?.length || 0;
-  return this.views + this.downloads * 2 + ratingScore * 5;
+  const ratingScore = this.averageRating || 0;
+
+  return this.views + this.downloads * 2 + ratingScore * 10;
 });
 
 /* Average Rating */

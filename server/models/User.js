@@ -26,7 +26,11 @@ const userSchema = new mongoose.Schema(
       minlength: 6,
       select: false,
     },
-
+    refreshToken: {
+      type: String,
+      default: null,
+      select: false,
+    },
     role: {
       type: String,
       enum: ["user", "admin"],
@@ -34,12 +38,84 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
 
-    bookmarks: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Paper",
-      },
-    ],
+    bookmarks: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Paper",
+        },
+      ],
+      default: [],
+    },
+    coins: {
+      type: Number,
+      default: 50,
+      min: 0,
+    },
+    badges: {
+      type: [String],
+      default: [],
+    },
+
+    previewedPapers: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Paper",
+        },
+      ],
+      default: [],
+    },
+
+    downloadedPapers: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Paper",
+        },
+      ],
+      default: [],
+    },
+
+    coinHistory: {
+      type: [
+        {
+          type: {
+            type: String,
+            enum: ["earned", "spent"],
+            required: true,
+          },
+
+          amount: {
+            type: Number,
+            required: true,
+            min: 1,
+          },
+
+          reason: {
+            type: String,
+            required: true,
+            trim: true,
+          },
+
+          paper: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Paper",
+          },
+
+          paperTitle: {
+            type: String,
+            trim: true,
+          },
+
+          createdAt: {
+            type: Date,
+            default: Date.now,
+          },
+        },
+      ],
+      default: [],
+    },
   },
   {
     timestamps: true,
@@ -72,6 +148,11 @@ userSchema.methods.toSafeObject = function () {
     role: this.role,
     bookmarks: this.bookmarks,
     createdAt: this.createdAt,
+    coins: this.coins,
+    previewedPapers: this.previewedPapers,
+    downloadedPapers: this.downloadedPapers,
+    coinHistory: this.coinHistory,
+    badges: this.badges,
   };
 };
 

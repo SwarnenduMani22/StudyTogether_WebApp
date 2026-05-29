@@ -12,13 +12,14 @@ function loadTheme() {
   try {
     const savedTheme = localStorage.getItem("theme");
 
-    /* Default Dark */
-
-    if (!savedTheme || savedTheme === "dark") {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
+    if (savedTheme) {
+      document.documentElement.classList.toggle("dark", savedTheme === "dark");
     } else {
-      document.documentElement.classList.remove("dark");
+      const prefersDark = window.matchMedia(
+        "(prefers-color-scheme: dark)",
+      ).matches;
+
+      document.documentElement.classList.toggle("dark", prefersDark);
     }
   } catch (error) {
     console.warn("Theme load error:", error);

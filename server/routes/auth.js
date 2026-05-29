@@ -15,8 +15,9 @@ router.post("/register", async (req, res) => {
 
     /* ---------- VALIDATION ---------- */
 
-    if (!name || !email || !password) {
+    if (!name?.trim() || !email?.trim() || !password?.trim()) {
       return res.status(400).json({
+        success: false,
         error: "All fields are required",
       });
     }
@@ -30,9 +31,9 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    if (password.length < 6) {
+    if (password.length < 8) {
       return res.status(400).json({
-        error: "Password must be at least 6 characters",
+        error: "Password must be at least 8 characters",
       });
     }
 
@@ -40,19 +41,19 @@ router.post("/register", async (req, res) => {
 
     if (!emailRegex.test(email)) {
       return res.status(400).json({
+        success: false,
         error: "Invalid email format",
       });
     }
-
-    /* ---------- CHECK EXISTING USER ---------- */
-
     const existingUser = await User.findOne({ email });
 
     if (existingUser) {
       return res.status(400).json({
+        success: false,
         error: "Email already registered",
       });
     }
+    /* ---------- CHECK EXISTING USER ---------- */
 
     /* ---------- HASH PASSWORD ---------- */
 
@@ -74,9 +75,16 @@ router.post("/register", async (req, res) => {
       user: user.toSafeObject(),
     });
   } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        error: "Email already registered",
+      });
+    }
+
     console.error("❌ Register error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: "Server error during registration",
     });
@@ -93,7 +101,7 @@ router.post("/login", async (req, res) => {
 
     /* ---------- VALIDATION ---------- */
 
-    if (!email || !password) {
+    if (!email?.trim() || !password?.trim()) {
       return res.status(400).json({
         error: "Email and password required",
       });
@@ -185,6 +193,11 @@ router.post("/refresh", async (req, res) => {
 
     try {
       decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+      if (decoded.tokenType !== "refresh") {
+        return res.status(401).json({
+          error: "Invalid token type",
+        });
+      }
     } catch {
       return res.status(401).json({
         error: "Invalid or expired refresh token",
@@ -193,11 +206,11 @@ router.post("/refresh", async (req, res) => {
 
     /* ---------- USER CHECK ---------- */
 
-    const user = await User.findById(decoded.id).select("_id role");
+    const user = await User.findById(decoded.id).select("_id role email");
 
     if (!user) {
-      return res.status(404).json({
-        error: "User not found",
+      return res.status(401).json({
+        error: "Unauthorized access",
       });
     }
 
@@ -207,6 +220,7 @@ router.post("/refresh", async (req, res) => {
       {
         id: user._id,
         role: user.role,
+        email: user.email,
       },
       process.env.JWT_SECRET,
       {

@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import multer from "multer";
 import { CloudinaryStorage } from "multer-storage-cloudinary";
 import cloudinary from "../config/cloudinary.js";
@@ -5,7 +6,7 @@ import cloudinary from "../config/cloudinary.js";
 const storage = new CloudinaryStorage({
   cloudinary,
   params: {
-    folder: "studyTogether",
+    folder: "study-together/papers",
     resource_type: "raw", // PDF only
     allowed_formats: ["pdf"], // 🔥 IMPORTANT
     type: "upload",
@@ -14,7 +15,7 @@ const storage = new CloudinaryStorage({
         .replace(/\s+/g, "-")
         .replace(/[^\w.-]/g, "");
 
-      return `${Date.now()}-${safeName}`;
+      return `${crypto.randomUUID()}-${safeName}`;
     },
   },
 });

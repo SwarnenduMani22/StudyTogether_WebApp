@@ -13,7 +13,7 @@ const verifyAdmin = (req, res, next) => {
 
     const { role } = req.user;
 
-    if (!role || role !== "admin") {
+    if (role !== "admin") {
       return res.status(403).json({
         success: false,
         error: "Access denied. Admin privileges required.",

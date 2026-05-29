@@ -109,7 +109,9 @@ const UploadPaper = () => {
 
     try {
       setLoading(true);
-
+      for (const pair of formData.entries()) {
+        console.log(pair[0], pair[1]);
+      }
       await uploadPaper(formData);
 
       toast.success(
@@ -224,11 +226,14 @@ const UploadPaper = () => {
 
           <input
             type="file"
-            accept="application/pdf"
-            onChange={(e) => setFile(e.target.files[0])}
+            accept=".pdf,application/pdf"
+            onChange={(e) => {
+              console.log(e.target.files);
+              setFile(e.target.files?.[0] || null);
+            }}
             disabled={limitReached && user?.role !== "admin"}
           />
-
+          <p>{file?.name}</p>
           <button
             disabled={loading || (limitReached && user?.role !== "admin")}
             className="btn-primary w-full"

@@ -129,12 +129,12 @@ const Admin = () => {
 
   /* ================= SEARCH FILTER ================= */
 
-  const filteredUsers = users.filter((user) => {
+  const filteredUsers = users.filter((u) => {
     const text = search.toLowerCase();
 
     return (
-      user?.name?.toLowerCase()?.includes(text) ||
-      user?.email?.toLowerCase()?.includes(text)
+      u?.name?.toLowerCase()?.includes(text) ||
+      u?.email?.toLowerCase()?.includes(text)
     );
   });
 
@@ -149,8 +149,9 @@ const Admin = () => {
           </h2>
 
           <button
+            disabled={loading}
             onClick={loadDashboard}
-            className="btn-primary w-auto px-4 py-2 text-sm"
+            className="btn-primary w-auto px-4 py-2 text-sm disabled:opacity-50"
           >
             Refresh
           </button>

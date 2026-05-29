@@ -5,7 +5,7 @@ import verifyToken from "../middleware/authMiddleware.js";
 import verifyAdmin from "../middleware/adminMiddleware.js";
 
 import User from "../models/User.js";
-
+import Paper from "../models/Paper.js";
 const router = express.Router();
 
 const escapeRegex = (value = "") =>
@@ -181,6 +181,58 @@ router.put("/users/:id/role", verifyToken, verifyAdmin, async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Server error while updating role",
+    });
+  }
+});
+/* =====================================================
+ADMIN DASHBOARD STATS
+GET /api/v1/admin/stats
+===================================================== */
+
+router.get("/stats", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const [users, admins, papersAgg] = await Promise.all([
+      User.countDocuments(),
+
+      User.countDocuments({ role: "admin" }),
+
+      Paper.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalPapers: { $sum: 1 },
+            totalViews: { $sum: "$views" },
+            totalDownloads: { $sum: "$downloads" },
+          },
+        },
+      ]),
+    ]);
+
+    const paperStats = papersAgg[0] || {
+      totalPapers: 0,
+      totalViews: 0,
+      totalDownloads: 0,
+    };
+
+    res.json({
+      success: true,
+
+      users,
+
+      admins,
+
+      papers: paperStats.totalPapers,
+
+      views: paperStats.totalViews,
+
+      downloads: paperStats.totalDownloads,
+    });
+  } catch (error) {
+    console.error("Admin stats error:", error);
+
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch admin stats",
     });
   }
 });

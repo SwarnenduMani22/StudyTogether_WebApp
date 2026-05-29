@@ -2,16 +2,12 @@ import axios from "axios";
 
 /* ================= BASE URL ================= */
 
-const BASE_URL = import.meta.env.VITE_API_URL;
-
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
 /* ================= AXIOS INSTANCE ================= */
 
 const api = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
-  headers: {
-    "Content-Type": "application/json",
-  },
 });
 
 /* ================= REQUEST INTERCEPTOR ================= */
@@ -66,14 +62,19 @@ api.interceptors.response.use(
 
         sessionStorage.setItem("accessToken", newAccessToken);
 
-        error.config.headers.Authorization = `Bearer ${newAccessToken}`;
-
+        error.config.headers = {
+          ...error.config.headers,
+          Authorization: `Bearer ${newAccessToken}`,
+        };
         return api(error.config);
       } catch (err) {
         console.error("Refresh token failed:", err);
 
-        sessionStorage.clear();
-        window.location.href = "/login";
+        sessionStorage.removeItem("user");
+        sessionStorage.removeItem("accessToken");
+        sessionStorage.removeItem("refreshToken");
+
+        window.location.replace("/login");
         return Promise.reject(err);
       }
     }
@@ -90,7 +91,8 @@ api.interceptors.response.use(
       console.error("Network error: backend may be offline");
     }
 
-    error.message = message;
+    error.message = !error.response ? "Unable to connect to server" : message;
+
     error.status = status;
 
     return Promise.reject(error);

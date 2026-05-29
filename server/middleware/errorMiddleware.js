@@ -1,7 +1,10 @@
 import multer from "multer";
 
 const errorHandler = (err, req, res, next) => {
-  console.error("❌ SERVER ERROR:", err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  console.error("❌ SERVER ERROR:", err.message);
 
   let statusCode = res.statusCode !== 200 ? res.statusCode : 500;
   let message = err.message || "Internal Server Error";
@@ -20,7 +23,7 @@ const errorHandler = (err, req, res, next) => {
 
   /* ================= INVALID FILE TYPE ================= */
 
-  if (err.message === "Only PDF files are allowed") {
+  if (err.message?.includes("Only PDF")) {
     statusCode = 400;
     message = "Invalid file type. Only PDF allowed";
   }

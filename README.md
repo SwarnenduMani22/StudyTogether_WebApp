@@ -1,90 +1,170 @@
-# 📚 StudyTogether – Full Stack MERN Web App
+# 📚 StudyTogether
 
-A modern **production-ready full-stack web application** where students can **upload, discover, and manage study materials (PDFs)** with secure authentication, admin moderation, and real-time engagement features.
+A modern full-stack MERN platform where students can upload, discover, rate, bookmark, and download academic study materials while earning rewards through a community-driven contribution system.
 
 ---
 
-# 🚀 Live Demo
+## 🚀 Live Demo
 
-- 🌐 **Frontend:** [https://study-together-web-app.vercel.app](https://study-together-web-app.vercel.app)
-- 🔗 **Backend API:** [https://studytogether-backend-xt0f.onrender.com/api/v1/health](https://studytogether-backend-xt0f.onrender.com/api/v1/health)
+### Frontend
+
+https://study-together-web-app.vercel.app
+
+### Backend API
+
+https://studytogether-backend-xt0f.onrender.com/api/v1/health
+
+---
+
+# ✨ Features
+
+## 🔐 Authentication & Authorization
+
+- User Registration
+- User Login
+- JWT Authentication
+- Refresh Token System
+- Protected Routes
+- Role-Based Access Control (RBAC)
+- Admin & User Roles
+
+---
+
+## 📄 Paper Management
+
+- Upload PDF Papers
+- Cloudinary PDF Storage
+- PDF Preview System
+- PDF Download System
+- Search Papers
+- Subject Filtering
+- Semester Filtering
+- Pagination
+- Duplicate Paper Prevention
+
+---
+
+## 🪙 Coin Economy System
+
+### Earn Coins
+
+- +30 Coins when a paper gets approved
+
+### Spend Coins
+
+- Preview Paper → 10 Coins
+- Download Paper → 40 Coins
+- Download After Preview → 30 Coins
+
+### Free Access
+
+- Admins
+- Paper Owners
+- Previously Purchased Papers
+
+---
+
+## 🏆 Gamification System
+
+### Badges
+
+- 🥇 First Upload
+- 📚 Contributor
+- 🔥 Top Uploader
+- 🪙 100 Coins Club
+- ⭐ Rising Scholar
+
+### Leaderboard
+
+Ranks users by:
+
+1. Coins
+2. Approved Uploads
+3. Total Uploads
+
+---
+
+## ⭐ Community Features
+
+- Paper Rating System
+- Average Rating Calculation
+- Comments System
+- Delete Own Comments
+- Admin Comment Moderation
+- Bookmark Papers
+
+---
+
+## 👤 User Dashboard
+
+- Profile Management
+- Update Name
+- Update Password
+- My Uploads
+- Approved Papers Count
+- Pending Papers Count
+- Bookmark Collection
+- Coin History
+
+---
+
+## 🛡️ Admin Features
+
+### Paper Moderation
+
+- View Pending Papers
+- Preview Submitted PDFs
+- Approve Papers
+- Reject Papers
+- Cloudinary File Cleanup
+
+### User Management
+
+- User Monitoring
+- Leaderboard Access
+
+---
+
+## 🌙 User Experience
+
+- Responsive Design
+- Dark Mode Support
+- Loading Skeletons
+- Toast Notifications
+- Error Handling
+- Mobile Friendly UI
 
 ---
 
 # 🛠 Tech Stack
 
-## 🌐 Frontend
+## Frontend
 
-- React.js (Vite)
+- React.js
+- Vite
 - Tailwind CSS
 - React Router DOM
 - Axios
+- React Hot Toast
 
-## ⚙️ Backend
+## Backend
 
 - Node.js
 - Express.js
-- MongoDB (Mongoose)
+- MongoDB
+- Mongoose
 
-## 🔐 Authentication & Security
+## Authentication
 
-- JWT (Access + Refresh Tokens)
-- Helmet (Security headers)
-- Express Rate Limiting
-- CORS Protection
+- JWT Access Tokens
+- JWT Refresh Tokens
+- bcryptjs
 
-## ☁️ File Storage
+## Storage
 
-- Multer (Upload handling)
-- Cloudinary (PDF storage & delivery)
-
----
-
-# ✨ Core Features
-
-## 🔐 Authentication System
-
-- User Registration & Login
-- JWT-based Authentication
-- Refresh Token Mechanism
-
-## 👤 User Features
-
-- Profile Management
-- Bookmark Papers
-- Upload Papers (User & Admin)
-
-## 📄 Paper Management
-
-- Upload PDF Files (Cloudinary)
-- Search & Filter (Subject, Semester)
-- Pagination
-- PDF Preview (React-PDF)
-- Download Papers
-
-## ⭐ Engagement System
-
-- View Counter
-- Download Counter
-- Rating System (1–5 ⭐)
-- Trending Papers Algorithm
-
-## 🛡 Admin Panel
-
-- Approve / Reject Papers
-- Delete Papers (DB + Cloudinary sync)
-- Manage Users
-- View Platform Analytics
-
----
-
-# 🧠 Smart System Design
-
-- Duplicate Paper Detection
-- Upload Limit (Max 2 pending papers per user)
-- Role-Based Access Control (RBAC)
-- Secure File Validation (PDF only + size limit)
-- Centralized Error Handling
+- Cloudinary
+- Multer
+- Multer Cloudinary Storage
 
 ---
 
@@ -93,47 +173,50 @@ A modern **production-ready full-stack web application** where students can **up
 ```bash
 StudyTogether/
 │
-├── client/                 # React Frontend (Vite)
+├── client/
 │   ├── src/
-│   ├── components/
-│   ├── pages/
-│   └── package.json
+│   │   ├── api/
+│   │   ├── components/
+│   │   ├── context/
+│   │   ├── hooks/
+│   │   ├── pages/
+│   │   ├── routes/
+│   │   ├── utils/
+│   │   └── App.jsx
 │
-├── server/                 # Node + Express Backend
+├── server/
+│   ├── config/
+│   ├── middleware/
 │   ├── models/
 │   ├── routes/
-│   ├── middleware/
-│   ├── config/
+│   ├── .env
 │   └── server.js
 │
-├── .gitignore
-├── README.md
-└── package.json
+└── README.md
 ```
 
 ---
 
 # ⚙️ Environment Variables
 
-## 🔐 Backend (`server/.env`)
+## Backend (.env)
 
 ```env
 PORT=5000
+
 MONGODB_URI=your_mongodb_uri
 
-JWT_SECRET=your_secret
+JWT_SECRET=your_jwt_secret
 JWT_REFRESH_SECRET=your_refresh_secret
 
 CLIENT_URL=http://localhost:5173
 
 CLOUD_NAME=your_cloudinary_name
-API_KEY=your_api_key
-API_SECRET=your_api_secret
+API_KEY=your_cloudinary_api_key
+API_SECRET=your_cloudinary_api_secret
 ```
 
----
-
-## 🌐 Frontend (`client/.env`)
+## Frontend (.env)
 
 ```env
 VITE_API_URL=http://localhost:5000/api/v1
@@ -141,98 +224,88 @@ VITE_API_URL=http://localhost:5000/api/v1
 
 ---
 
-# 🧪 API Endpoints (Sample)
+# 🚀 Installation
 
-| Method | Endpoint               | Description         |
-| ------ | ---------------------- | ------------------- |
-| POST   | `/auth/register`       | Register user       |
-| POST   | `/auth/login`          | Login user          |
-| GET    | `/papers`              | Get all papers      |
-| POST   | `/papers/upload`       | Upload paper        |
-| POST   | `/papers/:id/view`     | Increment views     |
-| POST   | `/papers/:id/download` | Increment downloads |
-
----
-
-# 🚀 Installation & Setup
-
-## 🔧 Clone Repository
+## Clone Repository
 
 ```bash
-git clone https://github.com/SwarnenduMani22/StudyTogether_WebApp.git
-cd StudyTogether_WebApp
+git clone https://github.com/your-username/studytogether.git
+cd studytogether
 ```
 
----
-
-## ▶️ Backend Setup
+## Backend
 
 ```bash
 cd server
+
 npm install
+
 npm run dev
 ```
 
----
-
-## ▶️ Frontend Setup
+## Frontend
 
 ```bash
 cd client
+
 npm install
+
 npm run dev
 ```
 
 ---
 
-# 🌍 Deployment
+# 🔗 Main API Endpoints
 
-## 🔹 Backend (Render)
-
-- Root Directory: `server`
-- Add Environment Variables
-- Deploy
-
-## 🔹 Frontend (Vercel)
-
-- Root Directory: `client`
-- Add `VITE_API_URL`
-- Deploy
-
----
-
-# 📸 Screenshots (Coming Soon)
-
-- Home Page
-- Papers Listing
-- Admin Dashboard
-- Upload Interface
+| Method | Endpoint                  | Description    |
+| ------ | ------------------------- | -------------- |
+| POST   | /auth/register            | Register User  |
+| POST   | /auth/login               | Login User     |
+| POST   | /auth/refresh             | Refresh Token  |
+| GET    | /papers                   | Get Papers     |
+| POST   | /papers/upload            | Upload Paper   |
+| POST   | /papers/:id/view          | Preview Paper  |
+| POST   | /papers/:id/download      | Download Paper |
+| POST   | /papers/:id/rate          | Rate Paper     |
+| POST   | /papers/:id/comment       | Add Comment    |
+| PUT    | /papers/admin/approve/:id | Approve Paper  |
+| DELETE | /papers/admin/reject/:id  | Reject Paper   |
 
 ---
 
-# 🧑‍💻 Author
+# 🔒 Security Features
 
-**Swarnendu Mani**
-
-- GitHub: [https://github.com/SwarnenduMani22](https://github.com/SwarnenduMani22)
+- JWT Authentication
+- Refresh Token Flow
+- Password Hashing (bcrypt)
+- Protected API Routes
+- Admin Authorization Middleware
+- PDF Validation
+- File Size Limiting
+- Duplicate Upload Prevention
 
 ---
 
 # 🎯 Future Improvements
 
-- 🔔 Notification System
-- 💬 Comments & Discussion
-- 📱 Mobile Optimization
-- 🌍 Multi-language Support
+- Real-Time Notifications
+- AI-Based Paper Recommendations
+- Advanced Analytics Dashboard
+- Email Verification
+- Password Reset System
+- Mobile App Version
 
 ---
 
-# ⭐ Final Thoughts
+# 👨‍💻 Author
 
-This project demonstrates:
+**Swarnendu Mani**
 
-✔ Full-stack MERN development
-✔ Secure authentication system
-✔ Cloud file handling (Cloudinary)
-✔ Scalable backend architecture
-✔ Production deployment (Vercel + Render)
+GitHub:
+https://github.com/SwarnenduMani22
+
+---
+
+# ⭐ Support
+
+If you like this project, consider giving it a star on GitHub.

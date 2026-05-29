@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "../api/axios";
 import AuthContext from "./auth-context";
-
+import Loader from "../components/common/Loader";
 /* ================= PROVIDER ================= */
 
 export const AuthProvider = ({ children }) => {
@@ -14,7 +14,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     try {
       const storedUser = sessionStorage.getItem("user");
-      const storedToken = sessionStorage.getItem("token");
+      const storedToken = sessionStorage.getItem("accessToken");
 
       if (storedUser && storedToken) {
         const parsedUser = JSON.parse(storedUser);
@@ -27,10 +27,9 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error("Auth load error:", error);
 
-      /* corrupted storage fix */
-
       sessionStorage.removeItem("user");
-      sessionStorage.removeItem("token");
+      sessionStorage.removeItem("accessToken");
+      sessionStorage.removeItem("refreshToken");
     } finally {
       setLoading(false);
     }
@@ -45,7 +44,7 @@ export const AuthProvider = ({ children }) => {
     setToken(tokenData);
 
     sessionStorage.setItem("user", JSON.stringify(userData));
-    sessionStorage.setItem("token", tokenData);
+    sessionStorage.setItem("accessToken", tokenData);
 
     api.defaults.headers.common["Authorization"] = `Bearer ${tokenData}`;
   };
@@ -57,11 +56,21 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
 
     sessionStorage.removeItem("user");
-    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("accessToken");
+    sessionStorage.removeItem("refreshToken");
 
     delete api.defaults.headers.common["Authorization"];
 
-    window.location.href = "/login";
+    window.location.replace("/login");
+  };
+  /* ================= UPDATE USER ================= */
+
+  const updateUser = (updatedUser) => {
+    if (!updatedUser) return;
+
+    setUser(updatedUser);
+
+    sessionStorage.setItem("user", JSON.stringify(updatedUser));
   };
 
   /* ================= CONTEXT VALUE ================= */
@@ -73,13 +82,12 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     setUser,
-    isAuthenticated: !!user,
+    updateUser,
+    isAuthenticated: !!user && !!token,
     isAdmin: user?.role === "admin",
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {!loading && children}
-    </AuthContext.Provider>
-  );
+  if (loading) return <Loader />;
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

@@ -106,7 +106,12 @@ router.get("/profile", verifyToken, async (req, res) => {
         path: "bookmarks",
         select: "title subject semester pdfLink",
       });
-
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: "User not found",
+      });
+    }
     res.json({
       success: true,
       user,
@@ -169,9 +174,9 @@ router.put("/update", verifyToken, async (req, res) => {
     if (name) {
       name = name.trim();
 
-      if (name.length < 3) {
+      if (name.length < 3 || name.length > 50) {
         return res.status(400).json({
-          error: "Name must be at least 3 characters",
+          error: "Name must be between 3 and 50 characters",
         });
       }
 
@@ -198,6 +203,7 @@ router.put("/update", verifyToken, async (req, res) => {
 
     const updatedUser = await User.findByIdAndUpdate(req.user._id, updateData, {
       new: true,
+      runValidators: true,
     }).select("-password");
 
     res.json({
@@ -236,7 +242,12 @@ router.delete("/delete", verifyToken, async (req, res) => {
       }
     }
 
-    await User.findByIdAndDelete(req.user._id);
+    await Promise.all([
+      Paper.deleteMany({
+        uploadedBy: req.user._id,
+      }),
+      User.findByIdAndDelete(req.user._id),
+    ]);
 
     res.json({
       success: true,
@@ -247,6 +258,77 @@ router.delete("/delete", verifyToken, async (req, res) => {
 
     res.status(500).json({
       error: "Server error while deleting account",
+    });
+  }
+});
+/* =================================================
+LEADERBOARD
+================================================= */
+
+router.get("/leaderboard", verifyToken, async (req, res) => {
+  try {
+    const users = await User.aggregate([
+      {
+        $lookup: {
+          from: "papers",
+          localField: "_id",
+          foreignField: "uploadedBy",
+          as: "papers",
+        },
+      },
+
+      {
+        $addFields: {
+          totalUploads: {
+            $size: "$papers",
+          },
+
+          approvedUploads: {
+            $size: {
+              $filter: {
+                input: "$papers",
+                as: "paper",
+                cond: {
+                  $eq: ["$$paper.status", "approved"],
+                },
+              },
+            },
+          },
+        },
+      },
+
+      {
+        $project: {
+          name: 1,
+          coins: 1,
+          role: 1,
+          totalUploads: 1,
+          approvedUploads: 1,
+        },
+      },
+
+      {
+        $sort: {
+          coins: -1,
+          approvedUploads: -1,
+          totalUploads: -1,
+        },
+      },
+
+      {
+        $limit: 10,
+      },
+    ]);
+
+    res.json({
+      success: true,
+      leaderboard: users,
+    });
+  } catch (error) {
+    console.error("Leaderboard error:", error);
+
+    res.status(500).json({
+      error: "Failed to fetch leaderboard",
     });
   }
 });

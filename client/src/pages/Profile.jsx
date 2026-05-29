@@ -10,7 +10,7 @@ import toast from "react-hot-toast";
 const Profile = () => {
   const navigate = useNavigate();
 
-  const { user, setUser } = useAuth();
+  const { user, updateUser } = useAuth();
 
   const [form, setForm] = useState({
     name: user?.name || "",
@@ -113,7 +113,7 @@ const Profile = () => {
 
       const updatedUser = res?.data?.user;
 
-      setUser(updatedUser);
+      updateUser(updatedUser);
 
       sessionStorage.setItem("user", JSON.stringify(updatedUser));
 
@@ -213,13 +213,41 @@ const Profile = () => {
         </div>
 
         {/* ================= USER STATS ================= */}
+        {/* ================= BADGES ================= */}
 
+        <div className="mt-8 border-t pt-6">
+          <h3 className="text-lg font-semibold mb-4 text-gray-800 dark:text-white">
+            Achievements & Badges
+          </h3>
+
+          {!user?.badges?.length ? (
+            <p className="text-sm text-gray-500">No badges earned yet</p>
+          ) : (
+            <div className="flex flex-wrap gap-3">
+              {user.badges.map((badge, index) => (
+                <div
+                  key={index}
+                  className="px-4 py-2 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-200 text-sm font-medium shadow-sm"
+                >
+                  {badge}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="mt-8 border-t pt-6">
           <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-white">
             My Activity
           </h3>
 
           <div className="grid grid-cols-2 gap-4 text-sm mb-4">
+            <div className="bg-yellow-100 dark:bg-yellow-900 p-3 rounded">
+              Study Coins
+              <div className="font-bold text-yellow-700 dark:text-yellow-300">
+                🪙 {user?.coins || 0}
+              </div>
+            </div>
+
             <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded">
               Uploaded Papers
               <div className="font-bold">{paperStats.total}</div>
@@ -238,6 +266,54 @@ const Profile = () => {
             <div className="bg-yellow-100 dark:bg-yellow-900 p-3 rounded">
               Pending
               <div className="font-bold">{paperStats.pending}</div>
+            </div>
+          </div>
+
+          {/* ================= COIN HISTORY ================= */}
+
+          <div className="mt-6">
+            <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-white">
+              Coin History
+            </h3>
+
+            {!user?.coinHistory?.length && (
+              <p className="text-sm text-gray-500">No coin activity yet </p>
+            )}
+
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {[...(user?.coinHistory || [])].reverse().map((item, index) => (
+                <div
+                  key={index}
+                  className="flex justify-between items-center bg-gray-100 dark:bg-gray-800 p-3 rounded"
+                >
+                  <div>
+                    <p className="font-medium text-sm text-gray-800 dark:text-white">
+                      {item.reason}
+                    </p>
+                    {item.paper && (
+                      <p className="text-xs text-gray-500">
+                        {item.paperTitle && (
+                          <p className="text-xs text-gray-500">
+                            {item.paperTitle}
+                          </p>
+                        )}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-400">
+                      {new Date(item.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+
+                  <div
+                    className={`font-bold ${
+                      item.type === "earned" ? "text-green-500" : "text-red-500"
+                    }`}
+                  >
+                    {item.type === "earned" ? "+" : "-"}
+                    {item.amount} 🪙
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 

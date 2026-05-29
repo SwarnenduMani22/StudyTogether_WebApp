@@ -83,7 +83,7 @@ const AdminCharts = ({ stats = {} }) => {
 
       {/* ================= SUMMARY ================= */}
 
-      <div className="grid grid-cols-5 gap-4 mt-6 text-center">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6 text-center">
         <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
           <p className="text-sm text-gray-500 dark:text-gray-300">Users</p>
           <p className="text-lg font-bold text-indigo-600">

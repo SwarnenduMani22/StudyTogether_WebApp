@@ -37,7 +37,7 @@ export const getPaper = async (id) => {
 
   const res = await api.get(`/papers/${id}`);
 
-  return res.data;
+  return res.data.paper;
 };
 
 /* =====================================================
@@ -50,9 +50,6 @@ export const uploadPaper = async (formData, onUploadProgress) => {
   }
 
   const res = await api.post("/papers/upload", formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
     ...(onUploadProgress && { onUploadProgress }),
   });
 
@@ -104,7 +101,7 @@ RATE PAPER ⭐ (FIXED)
 export const ratePaper = async (id, rating) => {
   validateId(id);
 
-  if (!rating || rating < 1 || rating > 5) {
+  if (typeof rating !== "number" || rating < 1 || rating > 5) {
     throw new Error("Rating must be between 1 and 5");
   }
 
@@ -132,7 +129,7 @@ GET USER BOOKMARKS
 export const getBookmarks = async () => {
   const res = await api.get("/users/profile");
 
-  return res.data?.user?.bookmarks || [];
+  return res.data?.user?.bookmarks || res.data?.bookmarks || [];
 };
 
 /* =====================================================
@@ -142,7 +139,9 @@ VIEW COUNTER
 export const incrementView = async (id) => {
   validateId(id);
 
-  await api.post(`/papers/${id}/view`);
+  const res = await api.post(`/papers/${id}/view`);
+
+  return res.data;
 };
 
 /* =====================================================
@@ -152,7 +151,9 @@ DOWNLOAD COUNTER
 export const incrementDownload = async (id) => {
   validateId(id);
 
-  await api.post(`/papers/${id}/download`);
+  const res = await api.post(`/papers/${id}/download`);
+
+  return res.data;
 };
 
 /* =====================================================
@@ -161,6 +162,35 @@ USER PAPERS
 
 export const getMyPapers = async () => {
   const res = await api.get("/users/my-papers");
+
+  return res.data;
+};
+/* =====================================================
+ADD COMMENT
+===================================================== */
+
+export const addComment = async (id, text) => {
+  validateId(id);
+
+  const res = await api.post(`/papers/${id}/comment`, {
+    text,
+  });
+
+  return res.data;
+};
+
+/* =====================================================
+DELETE COMMENT
+===================================================== */
+
+export const deleteComment = async (paperId, commentId) => {
+  validateId(paperId);
+
+  if (!commentId) {
+    throw new Error("Comment ID required");
+  }
+
+  const res = await api.delete(`/papers/${paperId}/comment/${commentId}`);
 
   return res.data;
 };

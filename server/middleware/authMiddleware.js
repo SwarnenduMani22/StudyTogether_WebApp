@@ -29,7 +29,7 @@ const authMiddleware = async (req, res, next) => {
 
     /* ================= EXTRACT TOKEN ================= */
 
-    const token = authHeader.split(" ")[1];
+    const token = authHeader?.split(" ")?.[1];
 
     if (!token) {
       return res.status(401).json({
@@ -78,9 +78,9 @@ const authMiddleware = async (req, res, next) => {
       .lean();
 
     if (!user) {
-      return res.status(404).json({
+      return res.status(401).json({
         success: false,
-        error: "User not found",
+        error: "Unauthorized access",
       });
     }
 

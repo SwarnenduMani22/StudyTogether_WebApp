@@ -18,7 +18,7 @@ const AdminPending = () => {
       setError("");
 
       const res = await api.get("/papers/admin/pending");
-      setPapers(res.data || []);
+      setPapers(res.data?.papers || []);
     } catch {
       setError("Failed to load pending papers");
     } finally {
@@ -77,52 +77,53 @@ const AdminPending = () => {
           <p className="text-gray-600 dark:text-gray-300">No pending papers</p>
         )}
 
-        {papers.map((paper) => {
-          const rawPdfLink = paper?.pdfLink || "";
-          const pdfUrl = resolvePdfUrl(rawPdfLink);
+        {Array.isArray(papers) &&
+          papers.map((paper) => {
+            const rawPdfLink = paper?.pdfLink || "";
+            const pdfUrl = resolvePdfUrl(rawPdfLink);
 
-          const isProcessing = processingId === paper._id;
+            const isProcessing = processingId === paper._id;
 
-          return (
-            <div
-              key={paper._id}
-              className="mb-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm p-5"
-            >
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                {paper.title}
-              </h3>
-              <p className="mt-1 text-gray-600 dark:text-gray-300">
-                {paper.subject} • Sem {paper.semester}
-              </p>
+            return (
+              <div
+                key={paper._id}
+                className="mb-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm p-5"
+              >
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                  {paper.title}
+                </h3>
+                <p className="mt-1 text-gray-600 dark:text-gray-300">
+                  {paper.subject} • Sem {paper.semester}
+                </p>
 
-              <div className="flex flex-wrap gap-3 mt-4">
-                <button
-                  onClick={() => setPreviewPdf(pdfUrl)}
-                  disabled={isProcessing || !pdfUrl}
-                  className="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition"
-                >
-                  Preview
-                </button>
+                <div className="flex flex-wrap gap-3 mt-4">
+                  <button
+                    onClick={() => setPreviewPdf(pdfUrl)}
+                    disabled={isProcessing || !pdfUrl}
+                    className="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  >
+                    Preview
+                  </button>
 
-                <button
-                  onClick={() => approvePaper(paper._id)}
-                  disabled={isProcessing}
-                  className="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition"
-                >
-                  {isProcessing ? "Processing..." : "Approve"}
-                </button>
+                  <button
+                    onClick={() => approvePaper(paper._id)}
+                    disabled={isProcessing}
+                    className="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  >
+                    {isProcessing ? "Processing..." : "Approve"}
+                  </button>
 
-                <button
-                  onClick={() => rejectPaper(paper._id)}
-                  disabled={isProcessing}
-                  className="px-4 py-2 rounded-md bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition"
-                >
-                  {isProcessing ? "Processing..." : "Reject"}
-                </button>
+                  <button
+                    onClick={() => rejectPaper(paper._id)}
+                    disabled={isProcessing}
+                    className="px-4 py-2 rounded-md bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  >
+                    {isProcessing ? "Processing..." : "Reject"}
+                  </button>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
 
         {previewPdf && (
           <PDFModal pdfLink={previewPdf} onClose={() => setPreviewPdf(null)} />

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../api/axios";
+import resolvePdfUrl from "../utils/resolvePdfUrl";
 
 import Skeleton from "../components/common/Skeleton";
 import toast from "react-hot-toast";
@@ -131,7 +132,7 @@ const MyPapers = () => {
 
               <div className="flex items-center gap-3">
                 <a
-                  href={paper.pdfLink}
+                  href={resolvePdfUrl(paper.pdfLink)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-sm"

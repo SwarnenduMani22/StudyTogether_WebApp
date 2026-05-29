@@ -75,3 +75,10 @@ coverage
 
 # Mac hidden
 ._*
+
+
+# React/Vite cache
+.vite
+
+# Optional package manager files
+.pnpm-store
