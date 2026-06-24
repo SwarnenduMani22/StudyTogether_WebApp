@@ -109,13 +109,16 @@ export default function Navbar() {
               </button>
               {/* COINS */}
 
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700">
+              <button
+                onClick={() => navigate("/wallet")}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 hover:scale-105 transition"
+              >
                 <span className="text-lg">🪙</span>
 
                 <span className="font-semibold text-yellow-700 dark:text-yellow-300">
                   {user?.coins || 0}
                 </span>
-              </div>
+              </button>
 
               {/* PROFILE */}
 

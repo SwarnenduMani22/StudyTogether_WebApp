@@ -26,7 +26,7 @@ const MyPapers = lazy(() => import("./pages/MyPapers"));
 const Bookmarks = lazy(() => import("./pages/Bookmarks"));
 const UploadPaper = lazy(() => import("./pages/UploadPaper"));
 const Leaderboard = lazy(() => import("./pages/Leaderboard"));
-
+const Wallet = lazy(() => import("./pages/Wallet"));
 /* ================= COMPONENTS ================= */
 
 import ErrorBoundary from "./components/common/ErrorBoundary";
@@ -116,7 +116,14 @@ export default function App() {
                     </ProtectedRoute>
                   }
                 />
-
+                <Route
+                  path="/wallet"
+                  element={
+                    <ProtectedRoute>
+                      <Wallet />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route
                   path="/papers"
                   element={

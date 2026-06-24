@@ -7,7 +7,7 @@ import multer from "multer";
 
 import Paper from "../models/Paper.js";
 import User from "../models/User.js";
-
+import { addCoins, spendCoins } from "../utils/coinManager.js";
 import cloudinary from "../config/cloudinary.js";
 import verifyToken from "../middleware/authMiddleware.js";
 import verifyAdmin from "../middleware/adminMiddleware.js";
@@ -355,17 +355,7 @@ router.put("/admin/approve/:id", verifyToken, verifyAdmin, async (req, res) => {
     const user = await User.findById(paper.uploadedBy);
 
     if (user) {
-      user.coins += 30;
-
-      user.coinHistory.push({
-        type: "earned",
-        amount: 30,
-        reason: "Paper Approved",
-        paper: paper._id,
-        paperTitle: paper.title,
-      });
-
-      await user.save();
+      await addCoins(user, 30, "Paper Approved", paper._id, paper.title);
       await generateBadges(user._id);
     }
 
@@ -512,19 +502,9 @@ router.post("/:id/view", verifyToken, async (req, res, next) => {
           });
         }
 
-        user.coins -= 10;
-
         user.previewedPapers.push(paper._id);
 
-        user.coinHistory.push({
-          type: "spent",
-          amount: 10,
-          reason: "Preview Paper",
-          paper: paper._id,
-          paperTitle: paper.title,
-        });
-
-        await user.save();
+        await spendCoins(user, 10, "Preview Paper", paper._id, paper.title);
       }
     }
 
@@ -601,19 +581,15 @@ router.post("/:id/download", verifyToken, async (req, res, next) => {
           });
         }
 
-        user.coins -= requiredCoins;
-
         user.downloadedPapers.push(paper._id);
 
-        user.coinHistory.push({
-          type: "spent",
-          amount: requiredCoins,
-          reason: "Download Paper",
-          paper: paper._id,
-          paperTitle: paper.title,
-        });
-
-        await user.save();
+        await spendCoins(
+          user,
+          requiredCoins,
+          "Download Paper",
+          paper._id,
+          paper.title,
+        );
       }
     }
 
@@ -1020,4 +996,28 @@ router.delete(
     }
   },
 );
+
+router.get("/top-papers", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const papers = await Paper.find({
+      status: "approved",
+    })
+      .select("title views downloads")
+      .sort({
+        downloads: -1,
+        views: -1,
+      })
+      .limit(5);
+
+    res.json({
+      success: true,
+      papers,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch top papers",
+    });
+  }
+});
 export default router;

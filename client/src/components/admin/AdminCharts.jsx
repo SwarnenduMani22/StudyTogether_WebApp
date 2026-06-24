@@ -12,8 +12,15 @@ import {
 
 /* ================= COLORS ================= */
 
-const COLORS = ["#6366f1", "#22c55e", "#f59e0b", "#06b6d4", "#ef4444"];
-
+const COLORS = [
+  "#6366f1", // Users
+  "#22c55e", // Admins
+  "#f59e0b", // Papers
+  "#06b6d4", // Views
+  "#ef4444", // Downloads
+  "#eab308", // Pending
+  "#16a34a", // Approved
+];
 const AdminCharts = ({ stats = {} }) => {
   /* ================= SAFE DATA ================= */
 
@@ -24,6 +31,8 @@ const AdminCharts = ({ stats = {} }) => {
       { name: "Papers", value: stats?.papers || 0 },
       { name: "Views", value: stats?.views || 0 },
       { name: "Downloads", value: stats?.downloads || 0 },
+      { name: "Pending", value: stats?.pending || 0 },
+      { name: "Approved", value: stats?.approved || 0 },
     ];
   }, [stats]);
 
@@ -83,7 +92,7 @@ const AdminCharts = ({ stats = {} }) => {
 
       {/* ================= SUMMARY ================= */}
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6 text-center">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mt-6 text-center">
         <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
           <p className="text-sm text-gray-500 dark:text-gray-300">Users</p>
           <p className="text-lg font-bold text-indigo-600">
@@ -114,6 +123,21 @@ const AdminCharts = ({ stats = {} }) => {
           <p className="text-sm text-gray-500 dark:text-gray-300">Downloads</p>
           <p className="text-lg font-bold text-red-500">
             {stats?.downloads || 0}
+          </p>
+        </div>
+        <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
+          <p className="text-sm text-gray-500 dark:text-gray-300">Pending</p>
+
+          <p className="text-lg font-bold text-yellow-500">
+            {stats?.pending || 0}
+          </p>
+        </div>
+
+        <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg">
+          <p className="text-sm text-gray-500 dark:text-gray-300">Approved</p>
+
+          <p className="text-lg font-bold text-green-500">
+            {stats?.approved || 0}
           </p>
         </div>
       </div>

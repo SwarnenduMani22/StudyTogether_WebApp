@@ -82,7 +82,7 @@ const userSchema = new mongoose.Schema(
         {
           type: {
             type: String,
-            enum: ["earned", "spent"],
+            enum: ["earned", "spent", "purchase", "bonus", "refund"],
             required: true,
           },
 
@@ -111,6 +111,24 @@ const userSchema = new mongoose.Schema(
           createdAt: {
             type: Date,
             default: Date.now,
+          },
+          transactionId: {
+            type: String,
+            default: null,
+          },
+
+          packageName: {
+            type: String,
+            default: null,
+          },
+
+          paymentId: {
+            type: String,
+            default: null,
+          },
+          metadata: {
+            type: mongoose.Schema.Types.Mixed,
+            default: null,
           },
         },
       ],

@@ -30,7 +30,7 @@ const Profile = () => {
 
   const [bookmarksCount, setBookmarksCount] = useState(0);
   const [paperLoading, setPaperLoading] = useState(true);
-
+  const [rank, setRank] = useState("Beginner");
   /* ================= LOAD USER DATA ================= */
 
   const fetchProfileData = async () => {
@@ -54,6 +54,7 @@ const Profile = () => {
       });
 
       setBookmarksCount(profileData?.user?.bookmarks?.length || 0);
+      setRank(profileData?.rank || "Beginner");
     } catch (error) {
       console.error("Profile load failed:", error);
     } finally {
@@ -132,7 +133,24 @@ const Profile = () => {
       setLoading(false);
     }
   };
+  const getRankStyle = (rank) => {
+    switch (rank) {
+      case "Legend":
+        return "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300";
 
+      case "Expert":
+        return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300";
+
+      case "Scholar":
+        return "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300";
+
+      case "Explorer":
+        return "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300";
+
+      default:
+        return "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
+    }
+  };
   /* ================= DELETE ACCOUNT ================= */
 
   const handleDelete = async () => {
@@ -211,7 +229,27 @@ const Profile = () => {
             Delete Account
           </button>
         </div>
+        <div className="mt-8 border-t pt-6">
+          <h3 className="text-lg font-semibold mb-4 text-gray-800 dark:text-white">
+            Study Rank
+          </h3>
 
+          <div
+            className={`inline-flex items-center px-5 py-3 rounded-full font-bold text-lg ${getRankStyle(rank)}`}
+          >
+            {rank === "Legend" && "👑"}
+            {rank === "Expert" && "🏆"}
+            {rank === "Scholar" && "📘"}
+            {rank === "Explorer" && "🥈"}
+            {rank === "Beginner" && "🥉"}
+
+            <span className="ml-2">{rank}</span>
+          </div>
+
+          <p className="text-sm text-gray-500 mt-2">
+            Current Coins: {user?.coins || 0}
+          </p>
+        </div>
         {/* ================= USER STATS ================= */}
         {/* ================= BADGES ================= */}
 
@@ -266,54 +304,6 @@ const Profile = () => {
             <div className="bg-yellow-100 dark:bg-yellow-900 p-3 rounded">
               Pending
               <div className="font-bold">{paperStats.pending}</div>
-            </div>
-          </div>
-
-          {/* ================= COIN HISTORY ================= */}
-
-          <div className="mt-6">
-            <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-white">
-              Coin History
-            </h3>
-
-            {!user?.coinHistory?.length && (
-              <p className="text-sm text-gray-500">No coin activity yet </p>
-            )}
-
-            <div className="space-y-2 max-h-72 overflow-y-auto">
-              {[...(user?.coinHistory || [])].reverse().map((item, index) => (
-                <div
-                  key={index}
-                  className="flex justify-between items-center bg-gray-100 dark:bg-gray-800 p-3 rounded"
-                >
-                  <div>
-                    <p className="font-medium text-sm text-gray-800 dark:text-white">
-                      {item.reason}
-                    </p>
-                    {item.paper && (
-                      <p className="text-xs text-gray-500">
-                        {item.paperTitle && (
-                          <p className="text-xs text-gray-500">
-                            {item.paperTitle}
-                          </p>
-                        )}
-                      </p>
-                    )}
-                    <p className="text-xs text-gray-400">
-                      {new Date(item.createdAt).toLocaleString()}
-                    </p>
-                  </div>
-
-                  <div
-                    className={`font-bold ${
-                      item.type === "earned" ? "text-green-500" : "text-red-500"
-                    }`}
-                  >
-                    {item.type === "earned" ? "+" : "-"}
-                    {item.amount} 🪙
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
 

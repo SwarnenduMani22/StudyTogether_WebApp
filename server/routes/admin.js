@@ -189,24 +189,34 @@ ADMIN DASHBOARD STATS
 GET /api/v1/admin/stats
 ===================================================== */
 
+/* =====================================================
+ADMIN DASHBOARD STATS
+GET /api/v1/admin/stats
+===================================================== */
+
 router.get("/stats", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const [users, admins, papersAgg] = await Promise.all([
-      User.countDocuments(),
+    const [users, admins, papersAgg, pendingPapers, approvedPapers] =
+      await Promise.all([
+        User.countDocuments(),
 
-      User.countDocuments({ role: "admin" }),
+        User.countDocuments({ role: "admin" }),
 
-      Paper.aggregate([
-        {
-          $group: {
-            _id: null,
-            totalPapers: { $sum: 1 },
-            totalViews: { $sum: "$views" },
-            totalDownloads: { $sum: "$downloads" },
+        Paper.aggregate([
+          {
+            $group: {
+              _id: null,
+              totalPapers: { $sum: 1 },
+              totalViews: { $sum: "$views" },
+              totalDownloads: { $sum: "$downloads" },
+            },
           },
-        },
-      ]),
-    ]);
+        ]),
+
+        Paper.countDocuments({ status: "pending" }),
+
+        Paper.countDocuments({ status: "approved" }),
+      ]);
 
     const paperStats = papersAgg[0] || {
       totalPapers: 0,
@@ -216,16 +226,13 @@ router.get("/stats", verifyToken, verifyAdmin, async (req, res) => {
 
     res.json({
       success: true,
-
       users,
-
       admins,
-
       papers: paperStats.totalPapers,
-
       views: paperStats.totalViews,
-
       downloads: paperStats.totalDownloads,
+      pending: pendingPapers,
+      approved: approvedPapers,
     });
   } catch (error) {
     console.error("Admin stats error:", error);
@@ -233,6 +240,168 @@ router.get("/stats", verifyToken, verifyAdmin, async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to fetch admin stats",
+    });
+  }
+});
+
+/* =====================================================
+TOP CONTRIBUTORS
+GET /api/v1/admin/top-contributors
+===================================================== */
+
+router.get("/top-contributors", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const contributors = await Paper.aggregate([
+      {
+        $match: {
+          status: "approved",
+          isActive: true,
+        },
+      },
+      {
+        $group: {
+          _id: "$uploadedBy",
+          totalUploads: { $sum: 1 },
+        },
+      },
+
+      {
+        $sort: {
+          totalUploads: -1,
+        },
+      },
+
+      {
+        $limit: 10,
+      },
+
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+
+      {
+        $unwind: "$user",
+      },
+
+      {
+        $project: {
+          _id: "$user._id",
+          name: "$user.name",
+          email: "$user.email",
+          role: "$user.role",
+          totalUploads: 1,
+        },
+      },
+    ]);
+
+    res.json({
+      success: true,
+      contributors,
+    });
+  } catch (error) {
+    console.error("Top contributors error:", error);
+
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch top contributors",
+    });
+  }
+});
+
+/* =====================================================
+TOP COIN HOLDERS
+GET /api/v1/admin/top-coin-holders
+===================================================== */
+
+router.get("/top-coin-holders", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const users = await User.find({})
+      .select("name email role coins badges")
+      .sort({ coins: -1 })
+      .limit(10);
+
+    res.json({
+      success: true,
+      users,
+    });
+  } catch (error) {
+    console.error("Top coin holders error:", error);
+
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch top coin holders",
+    });
+  }
+});
+/* =====================================================
+COIN ANALYTICS
+GET /api/v1/admin/coin-analytics
+===================================================== */
+
+router.get("/coin-analytics", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const analytics = await User.aggregate([
+      {
+        $project: {
+          coins: 1,
+          coinHistory: 1,
+        },
+      },
+
+      {
+        $group: {
+          _id: null,
+
+          totalCoinsInSystem: {
+            $sum: "$coins",
+          },
+
+          allTransactions: {
+            $push: "$coinHistory",
+          },
+        },
+      },
+    ]);
+
+    const data = analytics[0] || {
+      totalCoinsInSystem: 0,
+      allTransactions: [],
+    };
+
+    const transactions = data.allTransactions.flat();
+
+    const totalCoinsPurchased = transactions
+      .filter((t) => t.type === "purchase")
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const totalCoinsSpent = transactions
+      .filter((t) => t.type === "spent")
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const totalTransactions = transactions.length;
+
+    res.json({
+      success: true,
+
+      totalCoinsInSystem: data.totalCoinsInSystem,
+
+      totalCoinsPurchased,
+
+      totalCoinsSpent,
+
+      totalTransactions,
+    });
+  } catch (error) {
+    console.error("Coin analytics error:", error);
+
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch coin analytics",
     });
   }
 });

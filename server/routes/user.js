@@ -8,7 +8,13 @@ import User from "../models/User.js";
 import Paper from "../models/Paper.js";
 
 const router = express.Router();
-
+const getUserRank = (coins) => {
+  if (coins >= 500) return "Legend";
+  if (coins >= 250) return "Expert";
+  if (coins >= 100) return "Scholar";
+  if (coins >= 50) return "Explorer";
+  return "Beginner";
+};
 /* =================================================
 BOOKMARK PAPER (SAFE TOGGLE)
 ================================================= */
@@ -115,6 +121,7 @@ router.get("/profile", verifyToken, async (req, res) => {
     res.json({
       success: true,
       user,
+      rank: getUserRank(user.coins),
     });
   } catch (error) {
     console.error("Profile error:", error);
@@ -261,6 +268,48 @@ router.delete("/delete", verifyToken, async (req, res) => {
     });
   }
 });
+
+router.get("/coin-overview", verifyToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: "User not found",
+      });
+    }
+
+    const totalEarned = user.coinHistory
+      .filter((item) => ["earned", "bonus"].includes(item.type))
+      .reduce((sum, item) => sum + item.amount, 0);
+
+    const totalSpent = user.coinHistory
+      .filter((item) => item.type === "spent")
+      .reduce((sum, item) => sum + item.amount, 0);
+
+    const totalPurchased = user.coinHistory
+      .filter((item) => item.type === "purchase")
+      .reduce((sum, item) => sum + item.amount, 0);
+
+    res.json({
+      success: true,
+      currentBalance: user.coins,
+      totalEarned,
+      totalSpent,
+      totalPurchased,
+      transactions: user.coinHistory,
+    });
+  } catch (error) {
+    console.error("Coin overview error:", error);
+
+    res.status(500).json({
+      success: false,
+      error: "Failed to load coin overview",
+    });
+  }
+});
+
 /* =================================================
 LEADERBOARD
 ================================================= */
@@ -320,9 +369,14 @@ router.get("/leaderboard", verifyToken, async (req, res) => {
       },
     ]);
 
+    const leaderboard = users.map((user) => ({
+      ...user,
+      rank: getUserRank(user.coins),
+    }));
+
     res.json({
       success: true,
-      leaderboard: users,
+      leaderboard,
     });
   } catch (error) {
     console.error("Leaderboard error:", error);

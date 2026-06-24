@@ -18,8 +18,7 @@ import authRoutes from "./routes/auth.js";
 import userRoutes from "./routes/user.js";
 import adminRoutes from "./routes/admin.js";
 import paperRoutes from "./routes/paper.js";
-import adminStatsRoutes from "./routes/adminStats.js";
-
+import coinRoutes from "./routes/coin.js";
 const app = express();
 
 /* ================= ENV VALIDATION ================= */
@@ -96,8 +95,7 @@ app.use(`${API}/auth`, authRoutes);
 app.use(`${API}/users`, userRoutes);
 app.use(`${API}/papers`, paperRoutes);
 app.use(`${API}/admin`, adminRoutes);
-app.use(`${API}/admin`, adminStatsRoutes);
-
+app.use(`${API}/coins`, coinRoutes);
 /* ================= HEALTH CHECK ================= */
 
 app.get(`${API}/health`, (req, res) => {

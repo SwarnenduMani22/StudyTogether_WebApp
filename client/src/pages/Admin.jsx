@@ -17,12 +17,22 @@ const Admin = () => {
     papers: 0,
     views: 0,
     downloads: 0,
+    pending: 0,
+    approved: 0,
   });
 
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
+  const [topContributors, setTopContributors] = useState([]);
+  const [topCoinHolders, setTopCoinHolders] = useState([]);
 
+  const [coinAnalytics, setCoinAnalytics] = useState({
+    totalCoinsInSystem: 0,
+    totalCoinsPurchased: 0,
+    totalCoinsSpent: 0,
+    totalTransactions: 0,
+  });
   /* ================= FETCH USERS ================= */
 
   const fetchUsers = useCallback(async () => {
@@ -53,6 +63,8 @@ const Admin = () => {
         papers: data.papers || 0,
         views: data.views || 0,
         downloads: data.downloads || 0,
+        pending: data.pending || 0,
+        approved: data.approved || 0,
       });
     } catch (err) {
       console.error("Fetch stats error:", err);
@@ -60,6 +72,40 @@ const Admin = () => {
     }
   }, []);
 
+  const fetchTopContributors = useCallback(async () => {
+    try {
+      const res = await api.get("/admin/top-contributors");
+
+      setTopContributors(res.data?.contributors || []);
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
+
+  const fetchTopCoinHolders = useCallback(async () => {
+    try {
+      const res = await api.get("/admin/top-coin-holders");
+
+      setTopCoinHolders(res.data?.users || []);
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
+
+  const fetchCoinAnalytics = useCallback(async () => {
+    try {
+      const res = await api.get("/admin/coin-analytics");
+
+      setCoinAnalytics({
+        totalCoinsInSystem: res.data?.totalCoinsInSystem || 0,
+        totalCoinsPurchased: res.data?.totalCoinsPurchased || 0,
+        totalCoinsSpent: res.data?.totalCoinsSpent || 0,
+        totalTransactions: res.data?.totalTransactions || 0,
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
   /* ================= LOAD DASHBOARD ================= */
 
   const loadDashboard = useCallback(async () => {
@@ -67,14 +113,26 @@ const Admin = () => {
       setLoading(true);
       setError("");
 
-      await Promise.all([fetchUsers(), fetchStats()]);
+      await Promise.all([
+        fetchUsers(),
+        fetchStats(),
+        fetchTopContributors(),
+        fetchTopCoinHolders(),
+        fetchCoinAnalytics(),
+      ]);
     } catch (err) {
       console.error("Dashboard load error:", err);
       setError("Failed to load admin dashboard");
     } finally {
       setLoading(false);
     }
-  }, [fetchUsers, fetchStats]);
+  }, [
+    fetchUsers,
+    fetchStats,
+    fetchTopContributors,
+    fetchTopCoinHolders,
+    fetchCoinAnalytics,
+  ]);
 
   useEffect(() => {
     loadDashboard();
@@ -90,13 +148,7 @@ const Admin = () => {
 
       await api.delete(`/admin/users/${id}`);
 
-      setUsers((prev) => prev.filter((u) => u._id !== id));
-
-      setStats((prev) => ({
-        ...prev,
-        users: Math.max(prev.users - 1, 0),
-      }));
-
+      await Promise.all([fetchUsers(), fetchStats(), fetchTopCoinHolders()]);
       toast.success("User deleted");
     } catch (error) {
       console.error(error);
@@ -114,9 +166,7 @@ const Admin = () => {
 
       await api.put(`/admin/users/${id}/role`, { role: newRole });
 
-      setUsers((prev) =>
-        prev.map((u) => (u._id === id ? { ...u, role: newRole } : u)),
-      );
+      await Promise.all([fetchUsers(), fetchStats(), fetchTopContributors()]);
 
       toast.success("Role updated");
     } catch (error) {
@@ -140,7 +190,7 @@ const Admin = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 p-8">
-      <div className="max-w-6xl mx-auto space-y-10 fade-in">
+      <div className="max-w-7xl mx-auto space-y-10 fade-in">
         {/* TITLE */}
 
         <div className="flex items-center justify-between">
@@ -165,7 +215,7 @@ const Admin = () => {
 
         {/* ================= STATS ================= */}
 
-        <div className="grid md:grid-cols-5 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-6">
           <div className="card text-center">
             <p className="text-gray-500">Users</p>
             <h3 className="text-3xl font-bold">{stats.users}</h3>
@@ -190,12 +240,117 @@ const Admin = () => {
             <p className="text-gray-500">Downloads</p>
             <h3 className="text-3xl font-bold">{stats.downloads}</h3>
           </div>
+          <div className="card text-center">
+            <p className="text-gray-500">Pending</p>
+            <h3 className="text-3xl font-bold text-yellow-500">
+              {stats.pending}
+            </h3>
+          </div>
+
+          <div className="card text-center">
+            <p className="text-gray-500">Approved</p>
+            <h3 className="text-3xl font-bold text-green-500">
+              {stats.approved}
+            </h3>
+          </div>
         </div>
 
         {/* ================= CHARTS ================= */}
 
         <AdminCharts stats={stats} />
+        <div className="grid md:grid-cols-4 gap-6">
+          <div className="card text-center">
+            <p className="text-gray-500">Coins In System</p>
+            <h3 className="text-2xl font-bold text-yellow-500">
+              {coinAnalytics.totalCoinsInSystem}
+            </h3>
+          </div>
 
+          <div className="card text-center">
+            <p className="text-gray-500">Coins Purchased</p>
+            <h3 className="text-2xl font-bold text-green-500">
+              {coinAnalytics.totalCoinsPurchased}
+            </h3>
+          </div>
+
+          <div className="card text-center">
+            <p className="text-gray-500">Coins Spent</p>
+            <h3 className="text-2xl font-bold text-red-500">
+              {coinAnalytics.totalCoinsSpent}
+            </h3>
+          </div>
+
+          <div className="card text-center">
+            <p className="text-gray-500">Transactions</p>
+            <h3 className="text-2xl font-bold">
+              {coinAnalytics.totalTransactions}
+            </h3>
+          </div>
+        </div>
+        <div className="card">
+          <h3 className="text-xl font-semibold mb-4">Top Contributors 🏆</h3>
+
+          {topContributors.length === 0 ? (
+            <p className="text-center text-gray-500 py-4">
+              No contributor data available
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <th className="p-3 text-left">Name</th>
+                    <th className="p-3 text-left">Email</th>
+                    <th className="p-3 text-left">Uploads</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {topContributors.map((user) => (
+                    <tr key={user._id} className="border-b">
+                      <td className="p-3">{user.name}</td>
+                      <td className="p-3">{user.email}</td>
+                      <td className="p-3 font-bold">{user.totalUploads}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        <div className="card">
+          <h3 className="text-xl font-semibold mb-4">Top Coin Holders 💰</h3>
+
+          {topCoinHolders.length === 0 ? (
+            <p className="text-center text-gray-500 py-4">
+              No coin holder data available
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <th className="p-3 text-left">Name</th>
+                    <th className="p-3 text-left">Email</th>
+                    <th className="p-3 text-left">Coins</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {topCoinHolders.map((user) => (
+                    <tr key={user._id} className="border-b">
+                      <td className="p-3">{user.name}</td>
+                      <td className="p-3">{user.email}</td>
+                      <td className="p-3 font-bold text-yellow-500">
+                        {user.coins}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
         {/* ================= USER MANAGEMENT ================= */}
 
         <div className="card">
