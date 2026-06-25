@@ -28,13 +28,13 @@ export const loginUser = async (credentials) => {
 
     // 🔥 FIXED: support both token & accessToken
     if (accessToken || token) {
-      sessionStorage.setItem("accessToken", accessToken || token);
+      localStorage.setItem("accessToken", accessToken || token);
 
       if (refreshToken) {
-        sessionStorage.setItem("refreshToken", refreshToken);
+        localStorage.setItem("refreshToken", refreshToken);
       }
 
-      sessionStorage.setItem("user", JSON.stringify(user));
+      localStorage.setItem("user", JSON.stringify(user));
     }
 
     return res.data;
@@ -58,7 +58,9 @@ export const logout = async () => {
     if (typeof setToken === "function") setToken(null);
   } catch {}
 
-  sessionStorage.clear(); // 🔥 better
+  localStorage.removeItem("user");
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("refreshToken");
 
   delete api.defaults.headers.common["Authorization"];
 
@@ -86,7 +88,7 @@ export const updateProfile = async (data) => {
     const user = res.data?.user;
 
     if (user) {
-      sessionStorage.setItem("user", JSON.stringify(user));
+      localStorage.setItem("user", JSON.stringify(user));
     }
 
     return res.data;

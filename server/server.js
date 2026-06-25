@@ -6,6 +6,7 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
+import mongoSanitize from "express-mongo-sanitize";
 import path from "path";
 import { fileURLToPath } from "url";
 // ❌ duplicate cors remove (ONLY THIS FIX)
@@ -54,6 +55,13 @@ app.use(
   }),
 );
 
+app.use((req, res, next) => {
+  if (req.body) mongoSanitize.sanitize(req.body);
+  if (req.params) mongoSanitize.sanitize(req.params);
+  if (req.query) mongoSanitize.sanitize(req.query);
+  next();
+});
+
 /* ================= RATE LIMIT ================= */
 
 const limiter = rateLimit({
@@ -67,7 +75,17 @@ const limiter = rateLimit({
   },
 });
 
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: {
+    success: false,
+    error: "Too many login attempts. Please try again later.",
+  },
+});
+
 app.use("/api/v1", limiter);
+app.use("/api/v1/auth", authLimiter);
 /* ================= BODY PARSER ================= */
 
 app.use(express.json({ limit: "20mb" }));

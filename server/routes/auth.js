@@ -2,6 +2,7 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import verifyToken from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
@@ -152,6 +153,10 @@ router.post("/login", async (req, res) => {
       },
     );
 
+    /* ---------- SAVE REFRESH TOKEN ---------- */
+    user.refreshToken = refreshToken;
+    await user.save();
+
     /* ---------- RESPONSE ---------- */
 
     res.json({
@@ -206,11 +211,11 @@ router.post("/refresh", async (req, res) => {
 
     /* ---------- USER CHECK ---------- */
 
-    const user = await User.findById(decoded.id).select("_id role email");
+    const user = await User.findById(decoded.id).select("_id role email +refreshToken");
 
-    if (!user) {
+    if (!user || user.refreshToken !== refreshToken) {
       return res.status(401).json({
-        error: "Unauthorized access",
+        error: "Unauthorized access or token revoked",
       });
     }
 
@@ -245,9 +250,13 @@ router.post("/refresh", async (req, res) => {
 LOGOUT
 ================================================= */
 
-router.post("/logout", async (req, res) => {
+router.post("/logout", verifyToken, async (req, res) => {
   try {
-    // future: blacklist token / DB remove
+    const user = await User.findById(req.user._id);
+    if (user) {
+      user.refreshToken = null;
+      await user.save();
+    }
 
     res.json({
       success: true,

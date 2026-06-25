@@ -1,45 +1,57 @@
+import User from "../models/User.js";
+import Transaction from "../models/Transaction.js";
+
 export const addCoins = async (
   user,
   amount,
   reason,
-  paper = null,
+  paperId = null,
   paperTitle = null,
 ) => {
-  user.coins += amount;
-
-  user.coinHistory.push({
-    type: "earned",
+  await User.findOneAndUpdate(
+    { _id: user._id },
+    { $inc: { coins: amount } }
+  );
+  
+  await Transaction.create({
+    user: user._id,
     amount,
+    type: "earned",
     reason,
-    paper,
+    paperId,
     paperTitle,
   });
 
-  await user.save();
+  user.coins += amount; // Sync memory object
 };
 
 export const spendCoins = async (
   user,
   amount,
   reason,
-  paper = null,
+  paperId = null,
   paperTitle = null,
 ) => {
-  if (user.coins < amount) {
+  const result = await User.findOneAndUpdate(
+    { _id: user._id, coins: { $gte: amount } },
+    { $inc: { coins: -amount } },
+    { new: true }
+  );
+
+  if (!result) {
     throw new Error("Insufficient coins");
   }
 
-  user.coins -= amount;
-
-  user.coinHistory.push({
-    type: "spent",
+  await Transaction.create({
+    user: user._id,
     amount,
+    type: "spent",
     reason,
-    paper,
+    paperId,
     paperTitle,
   });
 
-  await user.save();
+  user.coins -= amount; // Sync memory object
 };
 
 export const purchaseCoins = async (
@@ -48,15 +60,17 @@ export const purchaseCoins = async (
   packageName,
   transactionId,
 ) => {
-  user.coins += amount;
+  await User.findOneAndUpdate(
+    { _id: user._id },
+    { $inc: { coins: amount } }
+  );
 
-  user.coinHistory.push({
-    type: "purchase",
+  await Transaction.create({
+    user: user._id,
     amount,
-    reason: "Coin Purchase",
-    packageName,
-    transactionId,
+    type: "purchased",
+    reason: packageName || "Coin Purchase",
   });
 
-  await user.save();
+  user.coins += amount; // Sync memory object
 };

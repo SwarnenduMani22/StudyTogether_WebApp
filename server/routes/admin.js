@@ -189,11 +189,6 @@ ADMIN DASHBOARD STATS
 GET /api/v1/admin/stats
 ===================================================== */
 
-/* =====================================================
-ADMIN DASHBOARD STATS
-GET /api/v1/admin/stats
-===================================================== */
-
 router.get("/stats", verifyToken, verifyAdmin, async (req, res) => {
   try {
     const [users, admins, papersAgg, pendingPapers, approvedPapers] =

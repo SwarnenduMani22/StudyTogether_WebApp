@@ -213,50 +213,6 @@ const Admin = () => {
           <p className="text-red-500 font-medium text-center">{error}</p>
         )}
 
-        {/* ================= STATS ================= */}
-
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-6">
-          <div className="card text-center">
-            <p className="text-gray-500">Users</p>
-            <h3 className="text-3xl font-bold">{stats.users}</h3>
-          </div>
-
-          <div className="card text-center">
-            <p className="text-gray-500">Admins</p>
-            <h3 className="text-3xl font-bold">{stats.admins}</h3>
-          </div>
-
-          <div className="card text-center">
-            <p className="text-gray-500">Papers</p>
-            <h3 className="text-3xl font-bold">{stats.papers}</h3>
-          </div>
-
-          <div className="card text-center">
-            <p className="text-gray-500">Views</p>
-            <h3 className="text-3xl font-bold">{stats.views}</h3>
-          </div>
-
-          <div className="card text-center">
-            <p className="text-gray-500">Downloads</p>
-            <h3 className="text-3xl font-bold">{stats.downloads}</h3>
-          </div>
-          <div className="card text-center">
-            <p className="text-gray-500">Pending</p>
-            <h3 className="text-3xl font-bold text-yellow-500">
-              {stats.pending}
-            </h3>
-          </div>
-
-          <div className="card text-center">
-            <p className="text-gray-500">Approved</p>
-            <h3 className="text-3xl font-bold text-green-500">
-              {stats.approved}
-            </h3>
-          </div>
-        </div>
-
-        {/* ================= CHARTS ================= */}
-
         <AdminCharts stats={stats} />
         <div className="grid md:grid-cols-4 gap-6">
           <div className="card text-center">

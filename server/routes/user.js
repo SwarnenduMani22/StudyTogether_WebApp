@@ -6,15 +6,24 @@ import verifyToken from "../middleware/authMiddleware.js";
 
 import User from "../models/User.js";
 import Paper from "../models/Paper.js";
+import Activity from "../models/Activity.js";
+import Transaction from "../models/Transaction.js";
+import { calculateUserRank } from "../services/rankService.js";
+import cloudinary from "../config/cloudinary.js";
 
 const router = express.Router();
-const getUserRank = (coins) => {
-  if (coins >= 500) return "Legend";
-  if (coins >= 250) return "Expert";
-  if (coins >= 100) return "Scholar";
-  if (coins >= 50) return "Explorer";
-  return "Beginner";
+
+const getPublicId = (url = "") => {
+  try {
+    if (!url.includes("res.cloudinary.com")) return null;
+    const parts = url.split("/");
+    const fileWithExt = parts.slice(-2).join("/");
+    return fileWithExt.replace(/\.[^/.]+$/, "");
+  } catch {
+    return null;
+  }
 };
+
 /* =================================================
 BOOKMARK PAPER (SAFE TOGGLE)
 ================================================= */
@@ -44,9 +53,7 @@ router.post("/bookmark/:id", verifyToken, async (req, res) => {
     );
 
     if (alreadyBookmarked) {
-      user.bookmarks = user.bookmarks.filter((id) => id.toString() !== paperId);
-
-      await user.save();
+      await User.updateOne({ _id: req.user._id }, { $pull: { bookmarks: paperId } });
 
       return res.json({
         success: true,
@@ -55,8 +62,7 @@ router.post("/bookmark/:id", verifyToken, async (req, res) => {
       });
     }
 
-    user.bookmarks.push(paperId);
-    await user.save();
+    await User.updateOne({ _id: req.user._id }, { $addToSet: { bookmarks: paperId } });
 
     res.json({
       success: true,
@@ -121,7 +127,7 @@ router.get("/profile", verifyToken, async (req, res) => {
     res.json({
       success: true,
       user,
-      rank: getUserRank(user.coins),
+      rank: calculateUserRank(user.coins, user.approvedUploads || 0), // Ideally approvedUploads should be calculated or denormalized
     });
   } catch (error) {
     console.error("Profile error:", error);
@@ -129,6 +135,55 @@ router.get("/profile", verifyToken, async (req, res) => {
     res.status(500).json({
       error: "Server error while fetching profile",
     });
+  }
+});
+
+/* =================================================
+PUBLIC PROFILE
+================================================= */
+router.get("/public/:id", async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+      .select("name rank badges coins totalUploads approvedUploads");
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    res.json({ success: true, user });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch public profile" });
+  }
+});
+
+/* =================================================
+PUBLIC PROFILE STATS (Monthly)
+================================================= */
+router.get("/public/:id/stats", async (req, res) => {
+  try {
+    const userId = new mongoose.Types.ObjectId(req.params.id);
+    const monthlyUploads = await Paper.aggregate([
+      { $match: { uploadedBy: userId, status: "approved" } },
+      { $group: { _id: { $month: "$createdAt" }, count: { $sum: 1 } } },
+      { $sort: { "_id": 1 } }
+    ]);
+    res.json({ success: true, monthlyUploads });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch stats" });
+  }
+});
+
+/* =================================================
+COMMUNITY ACTIVITY FEED
+================================================= */
+router.get("/activity", async (req, res) => {
+  try {
+    const limit = Number(req.query.limit) || 20;
+    const activities = await Activity.find()
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate("user", "name rank");
+      
+    res.json({ success: true, activities });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch activity feed" });
   }
 });
 
@@ -249,7 +304,29 @@ router.delete("/delete", verifyToken, async (req, res) => {
       }
     }
 
+    const userPapers = await Paper.find({ uploadedBy: req.user._id }).select('_id pdfLink');
+    const paperIds = userPapers.map(p => p._id);
+
+    // Delete PDFs from Cloudinary
+    for (const paper of userPapers) {
+      const publicId = getPublicId(paper.pdfLink);
+      if (publicId) {
+        try {
+          await cloudinary.uploader.destroy(publicId, { resource_type: "raw" });
+        } catch (err) {
+          console.error("Cloudinary delete error:", err.message);
+        }
+      }
+    }
+
     await Promise.all([
+      User.updateMany({}, {
+        $pull: {
+          bookmarks: { $in: paperIds },
+          downloadedPapers: { $in: paperIds },
+          previewedPapers: { $in: paperIds }
+        }
+      }),
       Paper.deleteMany({
         uploadedBy: req.user._id,
       }),
@@ -271,112 +348,69 @@ router.delete("/delete", verifyToken, async (req, res) => {
 
 router.get("/coin-overview", verifyToken, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = 20;
+    const userId = new mongoose.Types.ObjectId(req.user._id);
 
+    const user = await User.findById(userId).select("coins");
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        error: "User not found",
-      });
+      return res.status(404).json({ success: false, error: "User not found" });
     }
 
-    const totalEarned = user.coinHistory
-      .filter((item) => ["earned", "bonus"].includes(item.type))
-      .reduce((sum, item) => sum + item.amount, 0);
+    const [stats] = await Transaction.aggregate([
+      { $match: { user: userId } },
+      {
+        $group: {
+          _id: null,
+          totalEarned: { $sum: { $cond: [{ $in: ["$type", ["earned", "bonus"]] }, "$amount", 0] } },
+          totalSpent: { $sum: { $cond: [{ $eq: ["$type", "spent"] }, "$amount", 0] } },
+          totalPurchased: { $sum: { $cond: [{ $in: ["$type", ["purchased", "purchase"]] }, "$amount", 0] } }
+        }
+      }
+    ]);
 
-    const totalSpent = user.coinHistory
-      .filter((item) => item.type === "spent")
-      .reduce((sum, item) => sum + item.amount, 0);
-
-    const totalPurchased = user.coinHistory
-      .filter((item) => item.type === "purchase")
-      .reduce((sum, item) => sum + item.amount, 0);
+    const totalTransactions = await Transaction.countDocuments({ user: userId });
+    const transactions = await Transaction.find({ user: userId })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
 
     res.json({
       success: true,
       currentBalance: user.coins,
-      totalEarned,
-      totalSpent,
-      totalPurchased,
-      transactions: user.coinHistory,
+      totalEarned: stats?.totalEarned || 0,
+      totalSpent: stats?.totalSpent || 0,
+      totalPurchased: stats?.totalPurchased || 0,
+      transactions,
+      totalPages: Math.ceil(totalTransactions / limit),
+      currentPage: page,
     });
   } catch (error) {
     console.error("Coin overview error:", error);
-
-    res.status(500).json({
-      success: false,
-      error: "Failed to load coin overview",
-    });
+    res.status(500).json({ success: false, error: "Failed to load coin overview" });
   }
 });
 
 /* =================================================
-LEADERBOARD
+LEADERBOARD (OPTIMIZED)
 ================================================= */
 
 router.get("/leaderboard", verifyToken, async (req, res) => {
   try {
-    const users = await User.aggregate([
-      {
-        $lookup: {
-          from: "papers",
-          localField: "_id",
-          foreignField: "uploadedBy",
-          as: "papers",
-        },
-      },
-
-      {
-        $addFields: {
-          totalUploads: {
-            $size: "$papers",
-          },
-
-          approvedUploads: {
-            $size: {
-              $filter: {
-                input: "$papers",
-                as: "paper",
-                cond: {
-                  $eq: ["$$paper.status", "approved"],
-                },
-              },
-            },
-          },
-        },
-      },
-
-      {
-        $project: {
-          name: 1,
-          coins: 1,
-          role: 1,
-          totalUploads: 1,
-          approvedUploads: 1,
-        },
-      },
-
-      {
-        $sort: {
-          coins: -1,
-          approvedUploads: -1,
-          totalUploads: -1,
-        },
-      },
-
-      {
-        $limit: 10,
-      },
-    ]);
-
-    const leaderboard = users.map((user) => ({
-      ...user,
-      rank: getUserRank(user.coins),
-    }));
+    const users = await User.find()
+      .select("name coins role totalUploads approvedUploads rank")
+      .sort({
+        coins: -1,
+        approvedUploads: -1,
+        totalUploads: -1,
+      })
+      .limit(10)
+      .lean();
 
     res.json({
       success: true,
-      leaderboard,
+      leaderboard: users,
     });
   } catch (error) {
     console.error("Leaderboard error:", error);

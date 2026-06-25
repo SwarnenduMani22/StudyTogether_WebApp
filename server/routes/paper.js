@@ -12,6 +12,8 @@ import cloudinary from "../config/cloudinary.js";
 import verifyToken from "../middleware/authMiddleware.js";
 import verifyAdmin from "../middleware/adminMiddleware.js";
 import upload from "../middleware/uploadCloudinary.js";
+import { generateBadgesAndRank } from "../services/badgeService.js";
+import { logActivity } from "../services/activityService.js";
 const router = express.Router();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -38,47 +40,7 @@ const normalizeSubject = (value = "") => {
 };
 
 /* ================= BADGE SYSTEM ================= */
-
-const generateBadges = async (userId) => {
-  const user = await User.findById(userId);
-
-  if (!user) return;
-
-  const totalUploads = await Paper.countDocuments({
-    uploadedBy: user._id,
-  });
-
-  const approvedUploads = await Paper.countDocuments({
-    uploadedBy: user._id,
-    status: "approved",
-  });
-
-  const badges = [];
-
-  if (totalUploads >= 1) {
-    badges.push("🥇 First Upload");
-  }
-
-  if (totalUploads >= 5) {
-    badges.push("📚 Contributor");
-  }
-
-  if (approvedUploads >= 10) {
-    badges.push("🔥 Top Uploader");
-  }
-
-  if (user.coins >= 100) {
-    badges.push("🪙 100 Coins Club");
-  }
-
-  if (user.coins >= 250) {
-    badges.push("⭐ Rising Scholar");
-  }
-
-  user.badges = badges;
-
-  await user.save();
-};
+// Badge logic moved to services/badgeService.js
 
 /* ================= UPLOAD PAPER ================= */
 
@@ -166,7 +128,8 @@ router.post("/upload", verifyToken, (req, res) => {
         });
       }
       const pdfLink = req.file.path.replace("/image/upload/", "/raw/upload/");
-      const status = req.user.role === "admin" ? "approved" : "pending";
+      const isDraft = req.body.isDraft === 'true' || req.body.isDraft === true;
+      const status = req.user.role === "admin" ? "approved" : (isDraft ? "draft" : "pending");
 
       const paper = await Paper.create({
         title: title.trim(),
@@ -176,13 +139,15 @@ router.post("/upload", verifyToken, (req, res) => {
         uploadedBy: req.user._id,
         status,
       });
-      await generateBadges(req.user._id);
+      await generateBadgesAndRank(req.user._id);
 
       res.status(201).json({
         success: true,
         message:
           status === "approved"
             ? "Paper uploaded successfully"
+            : status === "draft" 
+            ? "Draft saved successfully" 
             : "Paper uploaded and waiting for admin approval",
         paper,
       });
@@ -241,12 +206,7 @@ router.get("/", verifyToken, async (req, res) => {
     };
 
     if (search) {
-      const safeSearch = escapeRegex(search);
-
-      filter.$or = [
-        { title: { $regex: safeSearch, $options: "i" } },
-        { subject: { $regex: safeSearch, $options: "i" } },
-      ];
+      filter.$text = { $search: search };
     }
 
     if (subject) filter.subject = subject;
@@ -326,37 +286,27 @@ router.put("/admin/approve/:id", verifyToken, verifyAdmin, async (req, res) => {
       return res.status(400).json({ error: "Invalid paper id" });
     }
 
-    const paper = await Paper.findOne({
-      _id: id,
-      status: "pending",
-    });
+    const paper = await Paper.findOneAndUpdate(
+      { _id: id, status: "pending" },
+      { $set: { status: "approved", reviewedBy: req.user._id } },
+      { new: true }
+    );
 
     if (!paper) {
       return res.status(404).json({
         success: false,
-        error: "Paper not found",
+        error: "Paper not found or already approved",
       });
     }
 
-    /* Prevent duplicate reward */
-
-    if (paper.status === "approved") {
-      return res.status(400).json({
-        success: false,
-        error: "Paper already approved",
-      });
-    }
-
-    paper.status = "approved";
-
-    await paper.save();
     /* ================= REWARD COINS ================= */
 
     const user = await User.findById(paper.uploadedBy);
 
     if (user) {
       await addCoins(user, 30, "Paper Approved", paper._id, paper.title);
-      await generateBadges(user._id);
+      await generateBadgesAndRank(user._id);
+      await logActivity(user._id, "upload", `${user.name} published a new paper: ${paper.title}`, paper._id, "Paper");
     }
 
     res.json({
@@ -377,6 +327,99 @@ router.put("/admin/approve/:id", verifyToken, verifyAdmin, async (req, res) => {
 /* =====================================================
 ADMIN REJECT (FINAL SAFE)
 ===================================================== */
+router.delete("/admin/reject/:id", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ error: "Invalid paper id" });
+
+    const paper = await Paper.findById(id);
+    if (!paper) return res.status(404).json({ error: "Paper not found" });
+
+    const publicId = getPublicId(paper.pdfLink);
+    if (publicId) await cloudinary.uploader.destroy(publicId, { resource_type: "raw" }).catch(e => console.error(e));
+
+    await paper.deleteOne();
+    await logActivity(req.user._id, "reject", `Admin ${req.user.name} rejected paper: ${paper.title}`, null, null);
+
+    res.json({ success: true, message: "Paper rejected and deleted" });
+  } catch (error) {
+    res.status(500).json({ error: "Rejection failed" });
+  }
+});
+
+/* =====================================================
+ADMIN BULK ACTIONS
+===================================================== */
+router.post("/admin/bulk-approve", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const { paperIds } = req.body;
+    if (!Array.isArray(paperIds) || !paperIds.length) return res.status(400).json({ error: "No papers selected" });
+
+    const papers = await Paper.find({ _id: { $in: paperIds }, status: "pending" });
+    
+    let approvedCount = 0;
+    for (const paper of papers) {
+      paper.status = "approved";
+      paper.reviewedBy = req.user._id;
+      await paper.save();
+
+      const u = await User.findById(paper.uploadedBy);
+      if (u) {
+        await addCoins(u, 30, "Paper Approved", paper._id, paper.title);
+        await generateBadgesAndRank(u._id);
+        await logActivity(u._id, "upload", `${u.name} published a new paper: ${paper.title}`, paper._id, "Paper");
+      }
+      approvedCount++;
+    }
+
+    res.json({ success: true, message: `Successfully approved ${approvedCount} papers` });
+  } catch (error) {
+    res.status(500).json({ error: "Bulk approve failed" });
+  }
+});
+
+router.post("/admin/bulk-reject", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const { paperIds } = req.body;
+    if (!Array.isArray(paperIds) || !paperIds.length) return res.status(400).json({ error: "No papers selected" });
+
+    const papers = await Paper.find({ _id: { $in: paperIds } });
+    
+    let rejectedCount = 0;
+    for (const paper of papers) {
+      const publicId = getPublicId(paper.pdfLink);
+      if (publicId) await cloudinary.uploader.destroy(publicId, { resource_type: "raw" }).catch(e => console.error(e));
+
+      await paper.deleteOne();
+      await logActivity(req.user._id, "reject", `Admin ${req.user.name} rejected paper: ${paper.title}`, null, null);
+      rejectedCount++;
+    }
+
+    res.json({ success: true, message: `Successfully rejected ${rejectedCount} papers` });
+  } catch (error) {
+    res.status(500).json({ error: "Bulk reject failed" });
+  }
+});
+
+/* ================= RELATED PAPERS ================= */
+router.get("/:id/related", verifyToken, async (req, res) => {
+  try {
+    const paper = await Paper.findById(req.params.id);
+    if (!paper) return res.status(404).json({ error: "Not found" });
+    const related = await Paper.find({
+      _id: { $ne: paper._id },
+      status: "approved",
+      isActive: true,
+      $or: [
+        { subject: paper.subject },
+        { semester: paper.semester }
+      ]
+    }).limit(3).lean();
+    res.json({ success: true, related });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch related papers" });
+  }
+});
 
 /* =====================================================
 TRENDING
@@ -384,18 +427,43 @@ TRENDING
 
 router.get("/trending", verifyToken, async (req, res) => {
   try {
-    const papers = await Paper.find({
-      isActive: true,
-      status: "approved",
-    })
-      .sort({
-        downloads: -1,
-        views: -1,
-        createdAt: -1,
-      })
-      .limit(5)
-      .populate("uploadedBy", "name")
-      .lean();
+    const papers = await Paper.aggregate([
+      { $match: { isActive: true, status: "approved" } },
+      {
+        $addFields: {
+          averageRating: { $avg: "$ratings.value" },
+        },
+      },
+      {
+        $addFields: {
+          popularityScore: {
+            $add: [
+              { $multiply: [{ $ifNull: ["$downloads", 0] }, 2] },
+              { $multiply: [{ $ifNull: ["$views", 0] }, 0.5] },
+              { $multiply: [{ $ifNull: ["$averageRating", 0] }, 5] },
+            ],
+          },
+        },
+      },
+      { $sort: { popularityScore: -1, createdAt: -1 } },
+      { $limit: 5 },
+      {
+        $lookup: {
+          from: "users",
+          localField: "uploadedBy",
+          foreignField: "_id",
+          as: "uploadedBy",
+        },
+      },
+      { $unwind: "$uploadedBy" },
+      {
+        $project: {
+          "uploadedBy.password": 0,
+          "uploadedBy.coinHistory": 0,
+          "uploadedBy.bookmarks": 0,
+        },
+      },
+    ]);
     res.json({
       success: true,
       papers,
@@ -508,9 +576,12 @@ router.post("/:id/view", verifyToken, async (req, res, next) => {
       }
     }
 
-    paper.views += 1;
-
-    await paper.save();
+    const alreadyViewed = paper.viewedBy.some(id => id.toString() === user._id.toString());
+    if (!alreadyViewed) {
+      paper.viewedBy.push(user._id);
+      paper.views = paper.viewedBy.length;
+      await paper.save();
+    }
 
     res.json({
       success: true,
@@ -596,6 +667,7 @@ router.post("/:id/download", verifyToken, async (req, res, next) => {
     paper.downloads += 1;
 
     await paper.save();
+    await generateBadgesAndRank(req.user._id);
 
     res.json({
       success: true,
@@ -663,8 +735,8 @@ router.post("/:id/rate", verifyToken, async (req, res) => {
         value: rating,
       });
     }
-
     await paper.save();
+    await generateBadgesAndRank(req.user._id);
 
     res.json({
       success: true,
@@ -722,6 +794,7 @@ router.post("/:id/comment", verifyToken, async (req, res) => {
     });
 
     await paper.save();
+    await generateBadgesAndRank(req.user._id);
 
     await paper.populate("comments.user", "name");
 

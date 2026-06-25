@@ -1,4 +1,5 @@
 import axios from "axios";
+import toast from "react-hot-toast";
 
 /* ================= BASE URL ================= */
 
@@ -15,7 +16,7 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     try {
-      const token = sessionStorage.getItem("accessToken");
+      const token = localStorage.getItem("accessToken");
 
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
@@ -50,7 +51,7 @@ api.interceptors.response.use(
       error.config._retry = true;
 
       try {
-        const refreshToken = sessionStorage.getItem("refreshToken");
+        const refreshToken = localStorage.getItem("refreshToken");
 
         if (!refreshToken) throw new Error("No refresh token");
 
@@ -60,7 +61,7 @@ api.interceptors.response.use(
 
         const newAccessToken = res.data.accessToken;
 
-        sessionStorage.setItem("accessToken", newAccessToken);
+        localStorage.setItem("accessToken", newAccessToken);
 
         error.config.headers = {
           ...error.config.headers,
@@ -70,9 +71,9 @@ api.interceptors.response.use(
       } catch (err) {
         console.error("Refresh token failed:", err);
 
-        sessionStorage.removeItem("user");
-        sessionStorage.removeItem("accessToken");
-        sessionStorage.removeItem("refreshToken");
+        localStorage.removeItem("user");
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("refreshToken");
 
         window.location.replace("/login");
         return Promise.reject(err);
@@ -81,14 +82,16 @@ api.interceptors.response.use(
 
     /* ================= SERVER ERROR ================= */
 
-    if (status === 500) {
+    if (status >= 500) {
       console.error("Server error:", message);
+      toast.error(message || "Internal server error");
     }
 
     /* ================= NETWORK ERROR ================= */
 
     if (!error.response) {
       console.error("Network error: backend may be offline");
+      toast.error("Unable to connect to server");
     }
 
     error.message = !error.response ? "Unable to connect to server" : message;

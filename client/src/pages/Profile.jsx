@@ -116,7 +116,7 @@ const Profile = () => {
 
       updateUser(updatedUser);
 
-      sessionStorage.setItem("user", JSON.stringify(updatedUser));
+      localStorage.setItem("user", JSON.stringify(updatedUser));
 
       toast.success("Profile updated successfully");
 
@@ -163,7 +163,9 @@ const Profile = () => {
     try {
       await api.delete("/users/delete");
 
-      sessionStorage.clear();
+      localStorage.removeItem("user");
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
 
       toast.success("Account deleted");
 

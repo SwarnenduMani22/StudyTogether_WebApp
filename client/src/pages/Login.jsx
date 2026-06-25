@@ -52,7 +52,7 @@ const Login = () => {
         throw new Error("Invalid server response");
       }
       // 🔥 IMPORTANT
-      sessionStorage.setItem("refreshToken", refreshToken);
+      localStorage.setItem("refreshToken", refreshToken);
 
       login(user, accessToken); // context login
 

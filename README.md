@@ -114,14 +114,16 @@ Ranks users by:
 
 - View Pending Papers
 - Preview Submitted PDFs
-- Approve Papers
-- Reject Papers
-- Cloudinary File Cleanup
+- Approve/Reject Papers
+- Bulk Approve/Reject Papers
+- Cloudinary File Cleanup Automation
 
 ### User Management
 
 - User Monitoring
-- Leaderboard Access
+- Change User Roles
+- Advanced Analytics Dashboard (Recharts)
+- Live System Metrics (DB Size, Daily Active Users)
 
 ---
 
@@ -129,9 +131,10 @@ Ranks users by:
 
 - Responsive Design
 - Dark Mode Support
-- Loading Skeletons
+- Infinite Scrolling (No pagination clicks)
+- Animated Loading Skeletons
 - Toast Notifications
-- Error Handling
+- Error Handling & Global Interceptors
 - Mobile Friendly UI
 
 ---
@@ -140,10 +143,13 @@ Ranks users by:
 
 ## Frontend
 
-- React.js
+- React.js 19
 - Vite
 - Tailwind CSS
 - React Router DOM
+- TanStack React Query (State Management & Caching)
+- React Infinite Scroll Component
+- Recharts (Admin Analytics)
 - Axios
 - React Hot Toast
 
@@ -153,11 +159,12 @@ Ranks users by:
 - Express.js
 - MongoDB
 - Mongoose
+- Morgan (Logging)
 
 ## Authentication
 
 - JWT Access Tokens
-- JWT Refresh Tokens
+- JWT Refresh Tokens (Database Persisted)
 - bcryptjs
 
 ## Storage
@@ -276,13 +283,17 @@ npm run dev
 # 🔒 Security Features
 
 - JWT Authentication
-- Refresh Token Flow
+- Database-Persisted Refresh Token Flow
 - Password Hashing (bcrypt)
 - Protected API Routes
 - Admin Authorization Middleware
 - PDF Validation
 - File Size Limiting
 - Duplicate Upload Prevention
+- Atomic MongoDB Transactions (Prevent Race Conditions)
+- NoSQL Injection Sanitization (`express-mongo-sanitize`)
+- Strict Rate Limiting (`express-rate-limit`)
+- HTTP Header Security (`helmet`)
 
 ---
 
@@ -290,7 +301,6 @@ npm run dev
 
 - Real-Time Notifications
 - AI-Based Paper Recommendations
-- Advanced Analytics Dashboard
 - Email Verification
 - Password Reset System
 - Mobile App Version

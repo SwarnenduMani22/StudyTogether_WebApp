@@ -9,9 +9,12 @@ import {
   deleteComment,
   ratePaper,
 } from "../api/paper";
+
+import api from "../api/axios";
 import resolvePdfUrl from "../utils/resolvePdfUrl";
 import PDFModal from "../components/papers/PDFModal";
 import Skeleton from "../components/common/Skeleton";
+import PaperCard from "../components/papers/PaperCard";
 
 import toast from "react-hot-toast";
 import useAuth from "../hooks/useAuth";
@@ -20,6 +23,7 @@ const PaperDetails = () => {
   const { user, updateUser } = useAuth();
 
   const [paper, setPaper] = useState(null);
+  const [relatedPapers, setRelatedPapers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -31,34 +35,29 @@ const PaperDetails = () => {
 
   /* ================= FETCH PAPER ================= */
 
-  useEffect(() => {
-    const fetchPaper = async () => {
-      try {
-        setLoading(true);
-        setError("");
+  const fetchPaper = useCallback(async () => {
+    try {
+      setLoading(true);
 
-        const data = await getPaper(id);
+      const [res, relatedRes] = await Promise.all([
+        getPaper(id),
+        api.get(`/papers/${id}/related`).catch(() => ({ data: { papers: [] } }))
+      ]);
 
-        if (!data) {
-          setError("Paper not found");
-          return;
-        }
-
-        setPaper(data);
-
-        setViews(data.views || 0);
-        setDownloads(data.downloads || 0);
-      } catch (err) {
-        console.error("Fetch paper error:", err);
-        setError("Failed to load paper");
-        toast.error("Failed to load paper");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (id) fetchPaper();
+      setPaper(res.data?.paper || res);
+      setRelatedPapers(relatedRes?.data?.related || []);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to load paper details");
+      toast.error("Failed to load paper details");
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    if (id) fetchPaper();
+  }, [id, fetchPaper]);
 
   /* ================= PDF URL ================= */
 
@@ -384,6 +383,22 @@ const PaperDetails = () => {
           ))}
         </div>
       </div>
+
+      {/* ================= RELATED PAPERS ================= */}
+
+      {relatedPapers?.length > 0 && (
+        <div className="max-w-3xl mx-auto mt-12">
+          <h2 className="text-2xl font-bold mb-6 text-gray-800 dark:text-white">
+            Related Papers 📑
+          </h2>
+          <div className="grid md:grid-cols-2 gap-6">
+            {relatedPapers.map((relatedPaper) => (
+              <PaperCard key={relatedPaper._id} paper={relatedPaper} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ================= PDF MODAL ================= */}
 
       {preview && (

@@ -56,6 +56,18 @@ const userSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    rank: {
+      type: String,
+      default: "Beginner",
+    },
+    totalUploads: {
+      type: Number,
+      default: 0,
+    },
+    approvedUploads: {
+      type: Number,
+      default: 0,
+    },
 
     previewedPapers: {
       type: [
@@ -72,64 +84,6 @@ const userSchema = new mongoose.Schema(
         {
           type: mongoose.Schema.Types.ObjectId,
           ref: "Paper",
-        },
-      ],
-      default: [],
-    },
-
-    coinHistory: {
-      type: [
-        {
-          type: {
-            type: String,
-            enum: ["earned", "spent", "purchase", "bonus", "refund"],
-            required: true,
-          },
-
-          amount: {
-            type: Number,
-            required: true,
-            min: 1,
-          },
-
-          reason: {
-            type: String,
-            required: true,
-            trim: true,
-          },
-
-          paper: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Paper",
-          },
-
-          paperTitle: {
-            type: String,
-            trim: true,
-          },
-
-          createdAt: {
-            type: Date,
-            default: Date.now,
-          },
-          transactionId: {
-            type: String,
-            default: null,
-          },
-
-          packageName: {
-            type: String,
-            default: null,
-          },
-
-          paymentId: {
-            type: String,
-            default: null,
-          },
-          metadata: {
-            type: mongoose.Schema.Types.Mixed,
-            default: null,
-          },
         },
       ],
       default: [],
@@ -171,6 +125,7 @@ userSchema.methods.toSafeObject = function () {
     downloadedPapers: this.downloadedPapers,
     coinHistory: this.coinHistory,
     badges: this.badges,
+    rank: this.rank,
   };
 };
 

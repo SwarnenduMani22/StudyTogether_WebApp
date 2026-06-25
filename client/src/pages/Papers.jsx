@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { getPapers } from "../api/paper";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import InfiniteScroll from "react-infinite-scroll-component";
 
 import PaperCard from "../components/papers/PaperCard";
 import Skeleton from "../components/common/Skeleton";
 
 const Papers = () => {
-  const [papers, setPapers] = useState([]);
-
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [suggestions, setSuggestions] = useState([]);
@@ -14,12 +14,6 @@ const Papers = () => {
   const [semester, setSemester] = useState("all");
   const [subject, setSubject] = useState("all");
   const [sort, setSort] = useState("new");
-
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   /* ================= SEARCH DEBOUNCE ================= */
 
@@ -31,43 +25,43 @@ const Papers = () => {
     return () => clearTimeout(timer);
   }, [search]);
 
-  /* ================= FETCH PAPERS ================= */
+  /* ================= TANSTACK REACT QUERY ================= */
 
-  const fetchPapers = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
-
-      const data = await getPapers({
-        page,
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isLoading,
+    isError,
+    refetch
+  } = useInfiniteQuery({
+    queryKey: ["papers", debouncedSearch, semester, subject, sort],
+    queryFn: async ({ pageParam = 1 }) => {
+      return await getPapers({
+        page: pageParam,
         search: debouncedSearch.trim(),
         semester: semester === "all" ? "" : semester,
         subject: subject === "all" ? "" : subject,
         sort,
       });
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, pages) => {
+      if (pages.length < lastPage.totalPages) {
+        return pages.length + 1;
+      }
+      return undefined;
+    },
+  });
 
-      const papersData = data?.papers || [];
-
-      setPapers(Array.isArray(papersData) ? papersData : []);
-      setTotalPages(data?.totalPages || 1);
-    } catch (err) {
-      console.error(err);
-      setError("Failed to load papers");
-      setPapers([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, debouncedSearch, semester, subject, sort]);
-
-  useEffect(() => {
-    fetchPapers();
-  }, [fetchPapers]);
+  const papers = data ? data.pages.flatMap(page => page.papers) : [];
 
   /* ================= SEARCH SUGGEST ================= */
 
   useEffect(() => {
     if (!search.trim()) return setSuggestions([]);
-
+    
+    // Only search through the currently loaded papers to save DB load
     const filtered = papers
       .filter((p) => p.title.toLowerCase().includes(search.toLowerCase()))
       .slice(0, 5);
@@ -78,7 +72,7 @@ const Papers = () => {
   /* ================= DELETE REFRESH ================= */
 
   const handleDeleteRefresh = () => {
-    fetchPapers();
+    refetch(); // Automatically invalidates cache and fetches fresh data
   };
 
   return (
@@ -97,10 +91,7 @@ const Papers = () => {
               type="text"
               placeholder="Search papers..."
               value={search}
-              onChange={(e) => {
-                setPage(1);
-                setSearch(e.target.value);
-              }}
+              onChange={(e) => setSearch(e.target.value)}
               className="input md:w-64"
             />
 
@@ -113,7 +104,7 @@ const Papers = () => {
                       setSearch(item.title);
                       setSuggestions([]);
                     }}
-                    className="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-sm"
+                    className="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-sm text-gray-800 dark:text-white"
                   >
                     {item.title}
                   </div>
@@ -125,10 +116,7 @@ const Papers = () => {
           {/* SEM */}
           <select
             value={semester}
-            onChange={(e) => {
-              setPage(1);
-              setSemester(e.target.value);
-            }}
+            onChange={(e) => setSemester(e.target.value)}
             className="input md:w-48"
           >
             <option value="all">All Semester</option>
@@ -142,10 +130,7 @@ const Papers = () => {
           {/* SUBJECT */}
           <select
             value={subject}
-            onChange={(e) => {
-              setPage(1);
-              setSubject(e.target.value);
-            }}
+            onChange={(e) => setSubject(e.target.value)}
             className="input md:w-48"
           >
             <option value="all">All Subjects</option>
@@ -154,18 +139,13 @@ const Papers = () => {
             <option value="DBMS">DBMS</option>
             <option value="Computer Network">Computer Network</option>
             <option value="Software Engineering">Software Engineering</option>
-            <option value="Artificial Intelligence">
-              Artificial Intelligence
-            </option>
+            <option value="Artificial Intelligence">Artificial Intelligence</option>
           </select>
 
           {/* SORT */}
           <select
             value={sort}
-            onChange={(e) => {
-              setPage(1);
-              setSort(e.target.value);
-            }}
+            onChange={(e) => setSort(e.target.value)}
             className="input md:w-48"
           >
             <option value="new">Newest</option>
@@ -174,53 +154,50 @@ const Papers = () => {
           </select>
         </div>
 
-        {/* LOADING */}
-        {loading && (
+        {/* LOADING SKELETON (Initial Load Only) */}
+        {isLoading && (
           <div className="grid md:grid-cols-3 gap-6">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-40 w-full" />
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <Skeleton key={i} className="h-40 w-full rounded-xl bg-gray-300 dark:bg-gray-700 animate-pulse" />
             ))}
           </div>
         )}
 
         {/* ERROR */}
-        {error && <p className="text-red-500 text-center">{error}</p>}
+        {isError && <p className="text-red-500 text-center font-bold">Failed to load papers. Please try again later.</p>}
 
         {/* EMPTY */}
-        {!loading && papers.length === 0 && !error && (
-          <p className="text-center text-gray-500">No papers found</p>
+        {!isLoading && papers.length === 0 && !isError && (
+          <p className="text-center text-gray-500 text-lg mt-10">No papers found</p>
         )}
 
-        {/* GRID */}
-        {!loading && papers.length > 0 && (
-          <div className="grid md:grid-cols-3 gap-6">
-            {papers.map((paper) => (
-              <PaperCard
-                key={paper._id}
-                paper={paper}
-                onDelete={handleDeleteRefresh}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* PAGINATION */}
-        {totalPages > 1 && (
-          <div className="flex justify-center gap-3 mt-10">
-            {Array.from({ length: totalPages }, (_, i) => (
-              <button
-                key={i}
-                onClick={() => setPage(i + 1)}
-                className={`px-4 py-2 rounded ${
-                  page === i + 1
-                    ? "bg-indigo-600 text-white"
-                    : "bg-gray-200 dark:bg-gray-700"
-                }`}
-              >
-                {i + 1}
-              </button>
-            ))}
-          </div>
+        {/* INFINITE SCROLL GRID */}
+        {!isLoading && papers.length > 0 && (
+          <InfiniteScroll
+            dataLength={papers.length}
+            next={fetchNextPage}
+            hasMore={hasNextPage}
+            loader={
+              <div className="flex justify-center my-6">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-600"></div>
+              </div>
+            }
+            endMessage={
+              <p className="text-center text-gray-500 mt-10">
+                You have seen all papers! 🎉
+              </p>
+            }
+          >
+            <div className="grid md:grid-cols-3 gap-6 overflow-hidden p-2">
+              {papers.map((paper) => (
+                <PaperCard
+                  key={paper._id}
+                  paper={paper}
+                  onDelete={handleDeleteRefresh}
+                />
+              ))}
+            </div>
+          </InfiniteScroll>
         )}
       </div>
     </div>

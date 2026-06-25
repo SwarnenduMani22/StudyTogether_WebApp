@@ -13,8 +13,8 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     try {
-      const storedUser = sessionStorage.getItem("user");
-      const storedToken = sessionStorage.getItem("accessToken");
+      const storedUser = localStorage.getItem("user");
+      const storedToken = localStorage.getItem("accessToken");
 
       if (storedUser && storedToken) {
         const parsedUser = JSON.parse(storedUser);
@@ -27,9 +27,9 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error("Auth load error:", error);
 
-      sessionStorage.removeItem("user");
-      sessionStorage.removeItem("accessToken");
-      sessionStorage.removeItem("refreshToken");
+      localStorage.removeItem("user");
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
     } finally {
       setLoading(false);
     }
@@ -43,8 +43,8 @@ export const AuthProvider = ({ children }) => {
     setUser(userData);
     setToken(tokenData);
 
-    sessionStorage.setItem("user", JSON.stringify(userData));
-    sessionStorage.setItem("accessToken", tokenData);
+    localStorage.setItem("user", JSON.stringify(userData));
+    localStorage.setItem("accessToken", tokenData);
 
     api.defaults.headers.common["Authorization"] = `Bearer ${tokenData}`;
   };
@@ -55,9 +55,9 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
     setToken(null);
 
-    sessionStorage.removeItem("user");
-    sessionStorage.removeItem("accessToken");
-    sessionStorage.removeItem("refreshToken");
+    localStorage.removeItem("user");
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
 
     delete api.defaults.headers.common["Authorization"];
 
@@ -70,7 +70,7 @@ export const AuthProvider = ({ children }) => {
 
     setUser(updatedUser);
 
-    sessionStorage.setItem("user", JSON.stringify(updatedUser));
+    localStorage.setItem("user", JSON.stringify(updatedUser));
   };
 
   /* ================= CONTEXT VALUE ================= */

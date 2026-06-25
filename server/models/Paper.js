@@ -52,12 +52,22 @@ const paperSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["pending", "approved"],
+      enum: ["draft", "pending", "approved"],
       default: "pending",
       index: true,
     },
 
     /* ================= ANALYTICS ================= */
+
+    viewedBy: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+      ],
+      default: [],
+    },
 
     views: {
       type: Number,
@@ -121,6 +131,13 @@ const paperSchema = new mongoose.Schema(
       default: true,
       index: true,
     },
+    
+    /* ================= ADMIN LOGS ================= */
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
   },
 
   {
@@ -145,6 +162,22 @@ paperSchema.index({ status: 1, isActive: 1 });
 /* 🔥 UNIQUE INDEX (NO DUPLICATE PAPERS) */
 
 paperSchema.index({ title: 1, subject: 1, semester: 1 }, { unique: true });
+
+/* ================= HOOKS ================= */
+
+paperSchema.post("deleteOne", { document: true, query: false }, async function () {
+  const User = mongoose.model("User");
+  await User.updateMany(
+    {},
+    {
+      $pull: {
+        bookmarks: this._id,
+        downloadedPapers: this._id,
+        previewedPapers: this._id,
+      },
+    }
+  );
+});
 
 /* ================= VIRTUAL FIELDS ================= */
 

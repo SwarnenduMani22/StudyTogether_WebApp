@@ -5,6 +5,9 @@ import App from "./App.jsx";
 import "./index.css";
 
 import { AuthProvider } from "./context/AuthContext";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+const queryClient = new QueryClient();
 
 /* ================= LOAD SAVED THEME ================= */
 
@@ -42,8 +45,10 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <React.StrictMode>
-    <AuthProvider>
-      <App />
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </QueryClientProvider>
   </React.StrictMode>,
 );
