@@ -107,19 +107,121 @@ const extractPagesFromBuffer = async (buffer) => {
   return []; // No extractable text — caller will trigger OCR fallback
 };
 
+// ─── Lazy-load OCR dependencies ───────────────────────────────────────────────
+// Both packages loaded lazily — missing packages degrade gracefully without
+// crashing the server at startup.
+
+let _pdfImgConvert = null;
+const getPdfImgConvert = () => {
+  if (!_pdfImgConvert) {
+    try {
+      const require = createRequire(import.meta.url);
+      _pdfImgConvert = require("pdf-img-convert");
+    } catch (err) {
+      throw new Error(
+        "pdf-img-convert is not installed. Run `npm install pdf-img-convert` inside server/. " +
+        err.message
+      );
+    }
+  }
+  return _pdfImgConvert;
+};
+
+let _tesseract = null;
+const getTesseract = () => {
+  if (!_tesseract) {
+    try {
+      const require = createRequire(import.meta.url);
+      _tesseract = require("tesseract.js");
+    } catch (err) {
+      throw new Error(
+        "tesseract.js is not installed. Run `npm install tesseract.js` inside server/. " +
+        err.message
+      );
+    }
+  }
+  return _tesseract;
+};
+
 /**
- * OCR Fallback — placeholder until tesseract.js is integrated (P2-002).
- * Returns a minimal descriptive string so the chunk is not empty.
+ * OCR Fallback — uses tesseract.js + pdf-img-convert to extract text from
+ * scanned / image-based PDFs that yield no text via pdf-parse.
+ *
+ * Pipeline:
+ *  1. Convert each PDF page to a PNG Uint8Array via pdf-img-convert
+ *  2. Create a single Tesseract worker (English) for the whole document
+ *  3. Run worker.recognize() on each page image
+ *  4. Concatenate all page texts and return as an array of { page, text }
+ *
+ * @param {Buffer} pdfBuffer - Raw PDF bytes
+ * @param {Object} paper     - Paper document (for logging)
+ * @returns {Promise<Array<{page: number, text: string}>>}
  */
-const runOcrFallback = async (paper) => {
-  console.warn(
-    `[AI Ingestor] OCR fallback triggered for "${paper.title}" — ` +
-    `tesseract.js not yet integrated (P2-002).`
+const runOcrOnBuffer = async (pdfBuffer, paper) => {
+  console.log(
+    `[AI Ingestor] Starting OCR for scanned PDF: "${paper.title}" (ID: ${paper._id})`
   );
-  return (
-    `[Scanned PDF] "${paper.title}" — subject: ${paper.subject}, ` +
-    `semester: ${paper.semester}. Full text extraction requires OCR (P2-002).`
+
+  const pdfImgConvert = getPdfImgConvert();
+  const { createWorker } = getTesseract();
+
+  // Step 1: Convert PDF pages to PNG image buffers
+  // pdf-img-convert accepts a Buffer and returns an array of Uint8Array (one per page)
+  let pageImages;
+  try {
+    pageImages = await pdfImgConvert.convert(pdfBuffer, {
+      width: 1700,       // High resolution for better OCR accuracy
+      height: 2200,
+      page_numbers: null, // null = all pages
+      base64: false,      // Return Uint8Array, not base64 string
+    });
+  } catch (convertErr) {
+    console.error(
+      `[AI Ingestor] PDF→image conversion failed for "${paper.title}":`,
+      convertErr.message
+    );
+    return [];
+  }
+
+  if (!pageImages || pageImages.length === 0) {
+    console.warn(`[AI Ingestor] No page images produced for "${paper.title}".`);
+    return [];
+  }
+
+  console.log(
+    `[AI Ingestor] Converted ${pageImages.length} page(s) to images — running OCR...`
   );
+
+  // Step 2: Create a single Tesseract worker for all pages (more efficient)
+  const worker = await createWorker("eng", 1, {
+    // Suppress verbose Tesseract logging in production
+    logger: process.env.NODE_ENV === "development"
+      ? (m) => console.log(`[Tesseract] ${m.status} ${Math.round((m.progress || 0) * 100)}%`)
+      : () => {},
+  });
+
+  const pages = [];
+  try {
+    // Step 3: OCR each page image
+    for (let i = 0; i < pageImages.length; i++) {
+      const imageBuffer = Buffer.from(pageImages[i]);
+      const { data } = await worker.recognize(imageBuffer);
+      const text = cleanText(data.text || "");
+      if (text.length > 0) {
+        pages.push({ page: i + 1, text });
+      }
+    }
+  } finally {
+    // Step 4: Always terminate the worker to free native resources
+    await worker.terminate();
+  }
+
+  console.log(
+    `[AI Ingestor] OCR complete — extracted text from ${pages.length}/${pageImages.length} page(s) ` +
+    `for "${paper.title}".`
+  );
+
+  return pages;
 };
 
 // ─── Main Processing Engine ───────────────────────────────────────────────────
@@ -130,7 +232,7 @@ const runOcrFallback = async (paper) => {
  * Steps:
  *  1. Download PDF buffer from paper.pdfLink (Cloudinary URL)
  *  2. Extract text with pdf-parse (real content, page-by-page)
- *  3. If text is too short, fall back to OCR stub
+ *  3. If text is too short, fall back to tesseract.js OCR (P2-002)
  *  4. Split into overlapping word-level chunks
  *  5. Generate embeddings and store in AIChatChunk (idempotent — deletes old chunks first)
  */
@@ -145,9 +247,10 @@ export const processPaper = async (paper) => {
       throw new Error("Paper has no pdfLink — cannot extract text.");
     }
 
+    let pdfBuffer = null;
     try {
-      const buffer = await downloadPdf(paper.pdfLink);
-      pages = await extractPagesFromBuffer(buffer);
+      pdfBuffer = await downloadPdf(paper.pdfLink);
+      pages = await extractPagesFromBuffer(pdfBuffer);
     } catch (parseErr) {
       console.error(
         `[AI Ingestor] PDF extraction failed for "${paper.title}":`,
@@ -158,8 +261,34 @@ export const processPaper = async (paper) => {
     // ── Step 3: OCR fallback if no usable text extracted ──────────────────
     const totalExtracted = pages.reduce((sum, p) => sum + p.text.length, 0);
     if (totalExtracted < MIN_TEXT_LENGTH) {
-      const fallbackText = await runOcrFallback(paper);
-      pages = [{ page: 1, text: cleanText(fallbackText) }];
+      if (pdfBuffer) {
+        try {
+          const ocrPages = await runOcrOnBuffer(pdfBuffer, paper);
+          if (ocrPages.length > 0) {
+            pages = ocrPages;
+          }
+        } catch (ocrErr) {
+          // OCR packages may not be installed yet — log and continue
+          console.error(
+            `[AI Ingestor] OCR failed for "${paper.title}" (is tesseract.js installed?):`,
+            ocrErr.message
+          );
+        }
+      }
+
+      // Last resort: if OCR also failed or produced nothing, store a minimal metadata chunk
+      // so the paper has at least one searchable entry
+      if (pages.length === 0 || pages.reduce((s, p) => s + p.text.length, 0) < MIN_TEXT_LENGTH) {
+        console.warn(
+          `[AI Ingestor] No text extractable for "${paper.title}" — storing metadata-only chunk.`
+        );
+        pages = [{
+          page: 1,
+          text: cleanText(
+            `"${paper.title}" — subject: ${paper.subject}, semester: ${paper.semester}.`
+          ),
+        }];
+      }
     }
 
     console.log(

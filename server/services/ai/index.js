@@ -4,6 +4,7 @@ import { searchSimilarity, generateEmbedding } from "./vectorSearch.js";
 import { getPlatformResponse } from "./promptTemplates.js";
 import { getCurrentModel, fetchWithRetry } from "./modelManager.js";
 import { queryOllama } from "./ollamaService.js";
+import { sanitizeOutput } from "./promptManager.js";
 
 // AI Response Caching Layer (TTL = 5 minutes)
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -49,7 +50,7 @@ export const generateLLMResponse = async (prompt, fallbackAnswer) => {
         maxTokens: 500,
         stream: false
       });
-      return answer || fallbackAnswer;
+      return answer ? sanitizeOutput(answer) : fallbackAnswer;
     } catch (err) {
       console.warn("[AI LLM Warning] Ollama query failed, falling back to offline answer.", err.message);
     }
@@ -83,7 +84,7 @@ export const generateLLMResponse = async (prompt, fallbackAnswer) => {
     const data = await response.json();
     const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (generatedText) {
-      return generatedText.trim();
+      return sanitizeOutput(generatedText);
     }
     return fallbackAnswer;
   } catch (error) {

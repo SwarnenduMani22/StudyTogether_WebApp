@@ -31,6 +31,36 @@ export const PROMPT_TEMPLATES = {
   },
 };
 
+// Security checks for Prompt Injection Detection
+export const detectPromptInjection = (text) => {
+  if (!text || typeof text !== "string") return false;
+  const lowerText = text.toLowerCase();
+  const attackPatterns = [
+    "ignore previous instructions",
+    "ignore all previous",
+    "system instruction",
+    "system override",
+    "developer mode",
+    "bypass limit",
+    "you are no longer a",
+    "prompt injection"
+  ];
+  return attackPatterns.some(pattern => lowerText.includes(pattern));
+};
+
+// Output sanitization to prevent XSS / HTML / Script injection from LLM output
+export const sanitizeOutput = (text) => {
+  if (!text) return "";
+  return text
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "") // remove scripts
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "") // remove iframes
+    .replace(/<(object|embed)\b[^<]*(?:(?!<\/(object|embed)>)<[^<]*)*<\/(object|embed)>/gi, "") // remove objects
+    .replace(/javascript:/gi, "") // remove javascript schema execution
+    .replace(/data:/gi, "") // remove data URIs
+    .replace(/\bon[a-z]+\s*=/gi, "") // remove inline event handlers (onerror, onload, etc)
+    .trim();
+};
+
 export const buildPrompt = (templateType, variables, options = {}) => {
   const version = options.version || "v1";
   const maxPromptLength = options.maxPromptLength || 4000;
@@ -49,13 +79,25 @@ export const buildPrompt = (templateType, variables, options = {}) => {
   if (templateType === "platform" || templateType === "study") {
     const { query, context, history = "", userContext = "" } = variables;
 
-    // Validate inputs
+    // Validate inputs & prevent Prompt Injection
     if (!query) throw new Error("query variable is required");
+    
+    // Secure input validation against prompt injection
+    if (detectPromptInjection(query)) {
+      console.warn(`[AI Security Warning] Suspicious prompt pattern blocked for template: ${templateType}`);
+      throw new Error("Prompt rejected: Suspicious command patterns detected.");
+    }
 
     const formattedBody = template.format(query, context, history, userContext);
     prompt = `System: ${template.system}\n\n${formattedBody}`;
   } else if (templateType === "general") {
     const { query, history = "" } = variables;
+    
+    if (detectPromptInjection(query)) {
+      console.warn(`[AI Security Warning] Suspicious prompt pattern blocked for template: general`);
+      throw new Error("Prompt rejected: Suspicious command patterns detected.");
+    }
+
     prompt = `System: ${template.system}\n\n${template.format(query, history)}`;
   } else if (templateType === "unknown" || templateType === "error") {
     const { query, errorMsg } = variables;

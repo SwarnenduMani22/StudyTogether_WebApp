@@ -24,4 +24,8 @@ const AIChatSessionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// TTL index to automatically remove old chat sessions after configured seconds (default 30 days)
+const SESSION_TTL_SECONDS = parseInt(process.env.SESSION_TTL_SECONDS || "2592000", 10);
+AIChatSessionSchema.index({ updatedAt: 1 }, { expireAfterSeconds: SESSION_TTL_SECONDS });
+
 export default mongoose.model("AIChatSession", AIChatSessionSchema);

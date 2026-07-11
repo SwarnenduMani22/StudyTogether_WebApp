@@ -145,7 +145,8 @@ app.use("/api/v1/ai", aiLimiter);
 
 /* ================= LOGGER ================= */
 
-app.use(morgan("dev"));
+const morganFormat = process.env.NODE_ENV === "production" ? "combined" : "dev";
+app.use(morgan(morganFormat));
 
 /* ================= STATIC FILES ================= */
 
@@ -167,13 +168,22 @@ app.use(`${API}/papers`, paperRoutes);
 app.use(`${API}/admin`, adminRoutes);
 app.use(`${API}/coins`, coinRoutes);
 app.use(`${API}/ai`, aiRoutes);
+
 /* ================= HEALTH CHECK ================= */
 
 app.get(`${API}/health`, (req, res) => {
-  res.status(200).json({
+  const dbStatus = mongoose.connection.readyState === 1 ? "connected" : "disconnected";
+  const healthStatus = dbStatus === "connected" ? "healthy" : "degraded";
+
+  res.status(healthStatus === "healthy" ? 200 : 503).json({
     success: true,
+    status: healthStatus,
     message: "🚀 StudyTogether API Running",
     version: "1.0",
+    services: {
+      database: dbStatus,
+    },
+    timestamp: Date.now()
   });
 });
 
@@ -204,17 +214,25 @@ app.use(errorHandler);
 
 mongoose.set("strictQuery", true);
 
-const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 5000,
-      autoIndex: process.env.NODE_ENV !== "production",
-    });
+const connectDB = async (retries = 5, delayMs = 5000) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await mongoose.connect(process.env.MONGODB_URI, {
+        serverSelectionTimeoutMS: 5000,
+        autoIndex: process.env.NODE_ENV !== "production",
+      });
 
-    console.log("✅ MongoDB Connected");
-  } catch (error) {
-    console.error("❌ MongoDB Connection Failed:", error.message);
-    process.exit(1);
+      console.log("✅ MongoDB Connected successfully");
+      return;
+    } catch (error) {
+      console.error(`❌ MongoDB Connection Attempt ${attempt}/${retries} Failed:`, error.message);
+      if (attempt === retries) {
+        console.error("❌ Maximum MongoDB connection retry attempts reached. Exiting process.");
+        process.exit(1);
+      }
+      console.log(`🔄 Retrying database connection in ${delayMs / 1000}s...`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
   }
 };
 
@@ -232,7 +250,7 @@ const startServer = async () => {
   const shutdown = () => {
     console.log("🛑 Server shutting down...");
     server.close(() => {
-      mongoose.connection.close(false, () => {
+      mongoose.connection.close().then(() => {
         process.exit(0);
       });
     });

@@ -69,7 +69,7 @@ export const purchaseCoins = async (
     user: user._id,
     amount,
     type: "purchased",
-    reason: packageName || "Coin Purchase",
+    reason: (packageName || "Coin Purchase") + (transactionId ? ` (Tx: ${transactionId})` : ""),
   });
 
   user.coins += amount; // Sync memory object

@@ -52,6 +52,7 @@ StudyTogether incentivizes academic resource sharing. Students who upload high-q
 *   **Community Engagement**: Star ratings (one vote per user), multi-user comment feeds, and personal study material bookmarks.
 *   **Admin Dashboard**: Interactive metrics detailing total users, admins, views, downloads, comments, and transaction-safe aggregate system coin analytics.
 *   **Razorpay Gateway Integration**: Cryptographically verified checkout webhooks to securely buy Study Coins packages.
+*   **AI Study Copilot**: Fully-integrated RAG assistant featuring real PDF text extraction, OCR fallback for scanned papers, hybrid keyword (BM25) and semantic retrieval, secure prompt validation, conversation history pruner, and automated study notes, mcq quizzes, flashcards, and strategic study plans.
 
 ---
 
@@ -72,6 +73,8 @@ StudyTogether incentivizes academic resource sharing. Students who upload high-q
 *   **MongoDB**: Document-oriented database.
 *   **Mongoose**: Schemas and queries modeling.
 *   **Multer / Cloudinary**: Multipart file uploads processing and secure cloud PDF storage.
+*   **Ollama**: Local host LLM model runner (mistral/nomic-embed-text).
+*   **pdf-parse / tesseract.js / pdf-img-convert**: High-performance extraction, scanned document OCR pipeline, and page-rendering helper.
 
 ---
 
@@ -130,6 +133,24 @@ RAZORPAY_KEY_ID=your_razorpay_key_id
 RAZORPAY_KEY_SECRET=your_razorpay_key_secret
 RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_secret
 NODE_ENV=development
+
+# AI Copilot Configs (Local Ollama LLM Runner)
+AI_PROVIDER=ollama
+OLLAMA_URL=http://localhost:11434
+EMBEDDING_MODEL=nomic-embed-text
+LLM_PROVIDER=ollama
+
+# RAG Chunking Parameters
+PDF_CHUNK_SIZE_WORDS=120
+PDF_CHUNK_OVERLAP_WORDS=20
+
+# Hybrid Retrieval Score Weights
+SEMANTIC_WEIGHT=0.6
+BM25_WEIGHT=0.4
+
+# Session Memory Guard Limits
+MAX_SESSION_MESSAGES=50
+SESSION_TTL_SECONDS=2592000
 ```
 
 ### Frontend (`client/.env`)
@@ -329,6 +350,19 @@ Vite compiles assets into `client/dist/` for static hosting (Vercel, Netlify, et
 *   `PUT /users/:id/role` — Modify user role.
 *   `POST /users/:id/refund` — Issue coin refund and log transaction.
 *   `GET /coin-analytics` — System-wide coin metrics.
+
+### AI Copilot Router (`/api/v1/ai`)
+*   `GET /status` — AI system readiness, model information, chunk counts, and Ollama health check status.
+*   `POST /chat` — Send query to the AI Copilot.
+*   `POST /chat/stream` — Stream query response via SSE (Server-Sent Events) tokens.
+*   `GET /history` — Get list of chat sessions for current user.
+*   `GET /conversations/:id` — Retrieve full conversation messages and citations.
+*   `DELETE /conversations` — Clear all conversation history.
+*   `POST /study-notes` — Generate structured markdown study notes from paper.
+*   `POST /quiz` — Generate practice MCQ quizzes (with options, answers, explanations).
+*   `POST /flashcards` — Generate study flashcards (Question/Front and Answer/Back).
+*   `POST /exam-plan` — Generate personalized strategic study plan.
+*   `POST /reindex` — Admin trigger vector index rebuild.
 
 ---
 

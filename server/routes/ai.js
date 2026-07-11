@@ -14,6 +14,7 @@ import AIChatChunk from "../models/AIChatChunk.js";
 import { switchModel, getCurrentModel, checkOllamaHealth, checkModelAvailability } from "../services/ai/modelManager.js";
 import { queryOllamaStream } from "../services/ai/ollamaService.js";
 import { getAIProvider } from "../services/ai/providers.js";
+import { detectPromptInjection } from "../services/ai/promptManager.js";
 
 const router = express.Router();
 
@@ -108,6 +109,13 @@ router.post("/chat", verifyToken, async (req, res) => {
       citations: aiResponse.citations || [],
     };
     session.messages.push(assistantMessage);
+
+    // Keep message history within reasonable bounds to prevent indefinite DB growth
+    const MAX_SESSION_MESSAGES = parseInt(process.env.MAX_SESSION_MESSAGES || "50", 10);
+    if (session.messages.length > MAX_SESSION_MESSAGES) {
+      session.messages = session.messages.slice(-MAX_SESSION_MESSAGES);
+    }
+
     await session.save();
 
     res.json({
@@ -136,6 +144,10 @@ router.post("/chat/stream", verifyToken, async (req, res) => {
 
     if (!message || !message.trim()) {
       return res.status(400).json({ success: false, error: "Message content required" });
+    }
+
+    if (detectPromptInjection(message)) {
+      return res.status(403).json({ success: false, error: "Security Policy Violation: Prompt injection detected." });
     }
 
     let session;
@@ -244,6 +256,13 @@ Answer:`;
 
     // Save Assistant message
     session.messages.push({ sender: "assistant", content: completeAnswer, citations });
+
+    // Keep message history within reasonable bounds to prevent indefinite DB growth
+    const MAX_SESSION_MESSAGES = parseInt(process.env.MAX_SESSION_MESSAGES || "50", 10);
+    if (session.messages.length > MAX_SESSION_MESSAGES) {
+      session.messages = session.messages.slice(-MAX_SESSION_MESSAGES);
+    }
+
     await session.save();
 
     // Send final event packet
@@ -401,7 +420,7 @@ router.post("/exam-plan", verifyToken, async (req, res) => {
   try {
     const { paperId, timeAvailable } = req.body;
     if (!paperId) return res.status(400).json({ success: false, error: "paperId required" });
-    const plan = await generateExamPlan(paperId, timeAvailable || "2 hours");
+    const plan = await generateExamPlan(paperId, timeAvailable || "2 hours", req.user._id);
     res.json({ success: true, plan });
   } catch (error) {
     console.error("❌ AI Exam Plan error:", error);
@@ -597,7 +616,7 @@ router.get("/health", async (req, res) => {
   if (providerType === "ollama") {
     try {
       const health = await checkOllamaHealth();
-      ollamaReachable = health?.status === "ok";
+      ollamaReachable = health?.status === "healthy";
     } catch {
       ollamaReachable = false;
     }
@@ -683,18 +702,93 @@ router.get("/study-knowledge/:id", verifyToken, async (req, res) => {
 });
 
 /* =================================================
-AI STATUS ENDPOINT
+AI STATUS ENDPOINT (P2-008)
 ================================================= */
-router.get("/status", verifyToken, (req, res) => {
-  res.json({
-    success: true,
-    active: true,
-    provider: process.env.AI_PROVIDER || "ollama",
-    model: getCurrentModel(),
-    ollamaUrl: process.env.OLLAMA_URL || "http://localhost:11434",
-    environment: process.env.NODE_ENV || "development",
-    uptime: process.uptime()
-  });
+router.get("/status", verifyToken, async (req, res) => {
+  try {
+    const provider = process.env.AI_PROVIDER || "ollama";
+    const embeddingModel = process.env.EMBEDDING_MODEL || "nomic-embed-text";
+    const ollamaUrl = process.env.OLLAMA_URL || "http://localhost:11434";
+
+    // 1. Check Ollama Health
+    let ollamaReachable = false;
+    let ollamaStatus = "offline";
+    let ollamaError = null;
+
+    if (provider === "ollama") {
+      try {
+        const health = await checkOllamaHealth();
+        ollamaReachable = health?.success && health?.status === "healthy";
+        ollamaStatus = ollamaReachable ? "online" : "unreachable";
+      } catch (err) {
+        ollamaStatus = "unreachable";
+        ollamaError = err.message;
+      }
+    } else {
+      ollamaStatus = "disabled";
+    }
+
+    // 2. Counts
+    const documentCount = await Paper.countDocuments({ status: "approved" });
+    const chunkCount = await AIChatChunk.countDocuments();
+
+    // 3. Retrieval Status
+    const retrievalStatus = (provider === "ollama" && ollamaReachable) ? "active" : "disabled";
+
+    // 4. BM25 Status
+    const bm25Status = "active";
+
+    // 5. Vector Index Status
+    let vectorIndexStatus = "empty";
+    if (chunkCount > 0) {
+      vectorIndexStatus = "healthy";
+    } else if (documentCount > 0) {
+      vectorIndexStatus = "stale (needs rebuild)";
+    }
+
+    // 6. AI Readiness
+    let aiReadiness = "not_ready";
+    if (provider === "ollama") {
+      if (ollamaReachable) {
+        if (chunkCount > 0) {
+          aiReadiness = "ready";
+        } else {
+          aiReadiness = "ready (no documents indexed)";
+        }
+      } else {
+        aiReadiness = "degraded (ollama unreachable)";
+      }
+    } else {
+      aiReadiness = "disabled";
+    }
+
+    res.json({
+      success: true,
+      active: provider !== "disabled",
+      provider,
+      model: getCurrentModel(),
+      embeddingModel,
+      ollamaUrl,
+      ollamaStatus,
+      ollamaError,
+      retrievalStatus,
+      bm25Status,
+      vectorIndexStatus,
+      documentCount,
+      chunkCount,
+      aiReadiness,
+      environment: process.env.NODE_ENV || "development",
+      uptime: process.uptime(),
+      timestamp: Date.now()
+    });
+  } catch (error) {
+    console.error("❌ AI Status endpoint error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to query AI status",
+      message: error.message
+    });
+  }
 });
 
 /* =================================================
