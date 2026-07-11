@@ -14,6 +14,7 @@ import verifyAdmin from "../middleware/adminMiddleware.js";
 import upload from "../middleware/uploadCloudinary.js";
 import { generateBadgesAndRank } from "../services/badgeService.js";
 import { logActivity } from "../services/activityService.js";
+import { processPaper, reprocessPaper, deletePaperKnowledge } from "../services/ai/ingestor.js";
 const router = express.Router();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -46,8 +47,6 @@ const normalizeSubject = (value = "") => {
 
 router.post("/upload", verifyToken, (req, res) => {
   upload.single("pdf")(req, res, async (err) => {
-    console.log("BODY =", req.body);
-    console.log("FILE =", req.file);
     /* 🔥 ERROR HANDLE */
 
     if (err instanceof multer.MulterError) {
@@ -309,6 +308,9 @@ router.put("/admin/approve/:id", verifyToken, verifyAdmin, async (req, res) => {
       await logActivity(user._id, "upload", `${user.name} published a new paper: ${paper.title}`, paper._id, "Paper");
     }
 
+    // Trigger PDF knowledge ingestion asynchronously
+    processPaper(paper).catch((err) => console.error("Background ingestion error:", err));
+
     res.json({
       success: true,
       message: "Paper approved successfully (+30 coins rewarded)",
@@ -341,6 +343,9 @@ router.delete("/admin/reject/:id", verifyToken, verifyAdmin, async (req, res) =>
     await paper.deleteOne();
     await logActivity(req.user._id, "reject", `Admin ${req.user.name} rejected paper: ${paper.title}`, null, null);
 
+    // Clean up processed knowledge chunks
+    deletePaperKnowledge(id).catch((err) => console.error("Background delete ingestion error:", err));
+
     res.json({ success: true, message: "Paper rejected and deleted" });
   } catch (error) {
     res.status(500).json({ error: "Rejection failed" });
@@ -369,6 +374,8 @@ router.post("/admin/bulk-approve", verifyToken, verifyAdmin, async (req, res) =>
         await generateBadgesAndRank(u._id);
         await logActivity(u._id, "upload", `${u.name} published a new paper: ${paper.title}`, paper._id, "Paper");
       }
+      // Process PDF chunks asynchronously
+      processPaper(paper).catch((err) => console.error("Bulk approved ingestion error:", err));
       approvedCount++;
     }
 
@@ -392,6 +399,9 @@ router.post("/admin/bulk-reject", verifyToken, verifyAdmin, async (req, res) => 
 
       await paper.deleteOne();
       await logActivity(req.user._id, "reject", `Admin ${req.user.name} rejected paper: ${paper.title}`, null, null);
+      
+      // Clean up chunks
+      deletePaperKnowledge(paper._id).catch((err) => console.error("Bulk rejected delete ingestion error:", err));
       rejectedCount++;
     }
 
@@ -473,6 +483,33 @@ router.get("/trending", verifyToken, async (req, res) => {
 
     res.status(500).json({
       error: "Failed to fetch trending papers",
+    });
+  }
+});
+
+/* =====================================================
+TOP PAPERS (must appear before /:id catch-all)
+===================================================== */
+router.get("/top-papers", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const papers = await Paper.find({
+      status: "approved",
+    })
+      .select("title views downloads")
+      .sort({
+        downloads: -1,
+        views: -1,
+      })
+      .limit(5);
+
+    res.json({
+      success: true,
+      papers,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch top papers",
     });
   }
 });
@@ -702,6 +739,7 @@ router.post("/:id/rate", verifyToken, async (req, res) => {
 
     if (!rating || rating < 1 || rating > 5) {
       return res.status(400).json({
+        success: false,
         error: "Rating must be between 1 and 5",
       });
     }
@@ -714,6 +752,7 @@ router.post("/:id/rate", verifyToken, async (req, res) => {
 
     if (!paper) {
       return res.status(404).json({
+        success: false,
         error: "Paper not found",
       });
     }
@@ -884,213 +923,265 @@ router.delete("/:paperId/comment/:commentId", verifyToken, async (req, res) => {
 UPDATE PAPER (ADMIN OR OWNER)
 ===================================================== */
 
-router.put("/:id", verifyToken, async (req, res) => {
+router.put("/:id", verifyToken, (req, res) => {
+  upload.single("pdf")(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({
+        success: false,
+        error: err.message,
+      });
+    }
+
+    if (err) {
+      return res.status(400).json({
+        success: false,
+        error: err.message,
+      });
+    }
+
+    try {
+      const { id } = req.params;
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({ success: false, error: "Invalid paper id" });
+      }
+
+      const paper = await Paper.findOne({
+        _id: id,
+        isActive: true,
+      });
+
+      if (!paper) {
+        return res.status(404).json({ success: false, error: "Paper not found" });
+      }
+
+      const isOwner = paper.uploadedBy.toString() === req.user._id.toString();
+
+      if (!isOwner && req.user.role !== "admin") {
+        return res.status(403).json({ success: false, error: "Not allowed to edit this paper" });
+      }
+
+      const updates = {};
+
+      if (typeof req.body.title === "string") {
+        const nextTitle = req.body.title.trim();
+
+        if (nextTitle.length < 3 || nextTitle.length > 200) {
+          if (req.file) {
+            const newPublicId = getPublicId(req.file.path);
+            if (newPublicId) {
+              await cloudinary.uploader.destroy(newPublicId, { resource_type: "raw" }).catch(e => console.error(e));
+            }
+          }
+          return res
+            .status(400)
+            .json({ success: false, error: "Title must be 3-200 characters" });
+        }
+
+        updates.title = nextTitle;
+      }
+
+      if (typeof req.body.subject === "string") {
+        const nextSubject = normalizeSubject(req.body.subject);
+
+        if (!VALID_SUBJECTS.has(nextSubject)) {
+          if (req.file) {
+            const newPublicId = getPublicId(req.file.path);
+            if (newPublicId) {
+              await cloudinary.uploader.destroy(newPublicId, { resource_type: "raw" }).catch(e => console.error(e));
+            }
+          }
+          return res.status(400).json({
+            success: false,
+            error: "Invalid subject",
+          });
+        }
+
+        updates.subject = nextSubject;
+      }
+
+      if (req.body.semester !== undefined) {
+        const nextSemester = Number(req.body.semester);
+
+        if (
+          !Number.isInteger(nextSemester) ||
+          nextSemester < 1 ||
+          nextSemester > 8
+        ) {
+          if (req.file) {
+            const newPublicId = getPublicId(req.file.path);
+            if (newPublicId) {
+              await cloudinary.uploader.destroy(newPublicId, { resource_type: "raw" }).catch(e => console.error(e));
+            }
+          }
+          return res
+            .status(400)
+            .json({ success: false, error: "Semester must be between 1 and 8" });
+        }
+
+        updates.semester = nextSemester;
+      }
+
+      let oldPublicId = null;
+      if (req.file) {
+        oldPublicId = getPublicId(paper.pdfLink);
+        updates.pdfLink = req.file.path.replace("/image/upload/", "/raw/upload/");
+      }
+
+      if (req.body.isDraft !== undefined) {
+        const isDraft = req.body.isDraft === "true" || req.body.isDraft === true;
+        if (paper.status === "draft" && !isDraft) {
+          updates.status = req.user.role === "admin" ? "approved" : "pending";
+        } else if (paper.status === "draft" && isDraft) {
+          updates.status = "draft";
+        }
+      }
+
+      if (req.body.status && req.user.role === "admin") {
+        updates.status = req.body.status;
+      }
+
+      const finalTitle = updates.title || paper.title;
+      const finalSubject = updates.subject || paper.subject;
+      const finalSemester = updates.semester || paper.semester;
+
+      const duplicate = await Paper.findOne({
+        _id: { $ne: paper._id },
+        title: { $regex: `^${escapeRegex(finalTitle)}$`, $options: "i" },
+        subject: { $regex: `^${escapeRegex(finalSubject)}$`, $options: "i" },
+        semester: finalSemester,
+      });
+
+      if (duplicate) {
+        if (req.file) {
+          const newPublicId = getPublicId(updates.pdfLink);
+          if (newPublicId) {
+            await cloudinary.uploader.destroy(newPublicId, { resource_type: "raw" }).catch(e => console.error(e));
+          }
+        }
+        return res.status(400).json({
+          success: false,
+          error: "Another paper with same title/subject/semester exists",
+        });
+      }
+
+      if (oldPublicId) {
+        await cloudinary.uploader.destroy(oldPublicId, { resource_type: "raw" }).catch(e => console.error(e));
+      }
+
+      Object.assign(paper, updates);
+      await paper.save();
+
+      // Trigger reprocess of PDF knowledge chunks if approved
+      if (paper.status === "approved") {
+        reprocessPaper(paper).catch((err) => console.error("Background reprocess error:", err));
+      }
+
+      if (updates.status && updates.status !== "draft" && paper.status !== "draft") {
+        await generateBadgesAndRank(paper.uploadedBy);
+      }
+
+      const updatedPaper = await Paper.findById(paper._id)
+        .populate("uploadedBy", "name email")
+        .lean();
+
+      res.json({
+        success: true,
+        message: "Paper updated successfully",
+        paper: updatedPaper,
+      });
+    } catch (error) {
+      if (req.file && updates.pdfLink) {
+        const newPublicId = getPublicId(updates.pdfLink);
+        if (newPublicId) {
+          await cloudinary.uploader.destroy(newPublicId, { resource_type: "raw" }).catch(e => console.error(e));
+        }
+      }
+
+      if (error?.code === 11000) {
+        return res.status(400).json({
+          success: false,
+          error: "Another paper with same title/subject/semester exists",
+        });
+      }
+
+      console.error("Update paper error:", error);
+
+      res.status(500).json({
+        success: false,
+        error: "Failed to update paper",
+      });
+    }
+  });
+});
+
+/* =====================================================
+DELETE PAPER (ADMIN OR OWNER)
+===================================================== */
+router.delete("/:id", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ error: "Invalid paper id" });
+      return res.status(400).json({ success: false, error: "Invalid paper ID" });
     }
 
-    const paper = await Paper.findOne({
-      _id: id,
-      isActive: true,
-    });
+    const paper = await Paper.findById(id);
 
     if (!paper) {
       return res.status(404).json({ success: false, error: "Paper not found" });
     }
 
     const isOwner = paper.uploadedBy.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === "admin";
 
-    if (!isOwner && req.user.role !== "admin") {
-      return res.status(403).json({ error: "Not allowed to edit this paper" });
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ success: false, error: "Not allowed to delete this paper" });
     }
 
-    const updates = {};
-
-    if (typeof req.body.title === "string") {
-      const nextTitle = req.body.title.trim();
-
-      if (nextTitle.length < 3 || nextTitle.length > 200) {
-        return res
-          .status(400)
-          .json({ error: "Title must be 3-200 characters" });
-      }
-
-      updates.title = nextTitle;
-    }
-
-    if (typeof req.body.subject === "string") {
-      const nextSubject = normalizeSubject(req.body.subject);
-
-      if (!VALID_SUBJECTS.has(nextSubject)) {
-        return res.status(400).json({
-          success: false,
-          error: "Invalid subject",
+    /* ================= CLOUDINARY DELETE ================= */
+    const publicId = getPublicId(paper.pdfLink);
+    if (publicId) {
+      try {
+        await cloudinary.uploader.destroy(publicId, {
+          resource_type: "raw",
         });
+      } catch (err) {
+        console.error("Cloudinary delete error:", err.message);
       }
-
-      updates.subject = nextSubject;
     }
 
-    if (req.body.semester !== undefined) {
-      const nextSemester = Number(req.body.semester);
-
-      if (
-        !Number.isInteger(nextSemester) ||
-        nextSemester < 1 ||
-        nextSemester > 8
-      ) {
-        return res
-          .status(400)
-          .json({ error: "Semester must be between 1 and 8" });
-      }
-
-      updates.semester = nextSemester;
-    }
-
-    if (!Object.keys(updates).length) {
-      return res.status(400).json({ error: "Nothing to update" });
-    }
-
-    const finalTitle = updates.title || paper.title;
-    const finalSubject = updates.subject || paper.subject;
-    const finalSemester = updates.semester || paper.semester;
-
-    const duplicate = await Paper.findOne({
-      _id: { $ne: paper._id },
-      title: { $regex: `^${escapeRegex(finalTitle)}$`, $options: "i" },
-      subject: { $regex: `^${escapeRegex(finalSubject)}$`, $options: "i" },
-      semester: finalSemester,
-    });
-
-    if (duplicate) {
-      return res.status(400).json({
-        error: "Another paper with same title/subject/semester exists",
-      });
-    }
-
-    Object.assign(paper, updates);
-    await paper.save();
-
-    const updatedPaper = await Paper.findById(paper._id)
-      .populate("uploadedBy", "name email")
-      .lean();
-
-    res.json({
-      success: true,
-      message: "Paper updated successfully",
-      paper: updatedPaper,
-    });
-  } catch (error) {
-    if (error?.code === 11000) {
-      return res.status(400).json({
-        error: "Another paper with same title/subject/semester exists",
-      });
-    }
-
-    console.error("Update paper error:", error);
-
-    res.status(500).json({
-      error: "Failed to update paper",
-    });
-  }
-});
-
-/* =====================================================
-DELETE (ADMIN FINAL SAFE)
-===================================================== */
-router.delete(
-  "/admin/reject/:id",
-  verifyToken,
-  verifyAdmin,
-  async (req, res) => {
-    try {
-      const { id } = req.params;
-
-      if (!mongoose.Types.ObjectId.isValid(id)) {
-        return res.status(400).json({ error: "Invalid paper ID" });
-      }
-
-      const paper = await Paper.findById(id);
-
-      if (!paper) {
-        return res
-          .status(404)
-          .json({ success: false, error: "Paper not found" });
-      }
-
-      /* ================= CLOUDINARY DELETE ================= */
-
-      const publicId = getPublicId(paper.pdfLink);
-
-      if (publicId) {
-        try {
-          await cloudinary.uploader.destroy(publicId, {
-            resource_type: "raw",
-          });
-        } catch (err) {
-          console.error("Cloudinary delete error:", err.message);
-        }
-      }
-
-      /* ================= LOCAL DELETE (OPTIONAL) ================= */
-
-      if (paper.pdfLink.includes("/uploads/")) {
-        try {
-          const filename = paper.pdfLink.split("/uploads/")[1];
-
-          if (filename) {
-            const filePath = path.join(uploadsDir, filename);
-
-            if (fs.existsSync(filePath)) {
-              fs.unlinkSync(filePath);
-            }
+    /* ================= LOCAL DELETE (OPTIONAL) ================= */
+    if (paper.pdfLink.includes("/uploads/")) {
+      try {
+        const filename = paper.pdfLink.split("/uploads/")[1];
+        if (filename) {
+          const filePath = path.join(uploadsDir, filename);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
           }
-        } catch (err) {
-          console.error("Local file delete error:", err.message);
         }
+      } catch (err) {
+        console.error("Local file delete error:", err.message);
       }
-
-      await paper.deleteOne();
-
-      res.json({
-        success: true,
-        message: "Paper rejected & deleted (Cloudinary + DB)",
-      });
-    } catch (error) {
-      console.error("Reject paper error:", error);
-
-      res.status(500).json({
-        success: false,
-        error: "Reject failed",
-      });
     }
-  },
-);
 
-router.get("/top-papers", verifyToken, verifyAdmin, async (req, res) => {
-  try {
-    const papers = await Paper.find({
-      status: "approved",
-    })
-      .select("title views downloads")
-      .sort({
-        downloads: -1,
-        views: -1,
-      })
-      .limit(5);
+    await paper.deleteOne();
+
+    // Clean up processed knowledge chunks
+    deletePaperKnowledge(id).catch((err) => console.error("Background delete ingestion error:", err));
 
     res.json({
       success: true,
-      papers,
+      message: "Paper deleted successfully (Cloudinary + DB)",
     });
   } catch (error) {
+    console.error("Delete paper error:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to fetch top papers",
+      error: "Delete failed",
     });
   }
 });
+
 export default router;

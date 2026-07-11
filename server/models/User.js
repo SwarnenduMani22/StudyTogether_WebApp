@@ -60,6 +60,14 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "Beginner",
     },
+    lastActiveDate: {
+      type: String,
+      default: "",
+    },
+    dailyStreak: {
+      type: Number,
+      default: 0,
+    },
     totalUploads: {
       type: Number,
       default: 0,
@@ -126,8 +134,14 @@ userSchema.methods.toSafeObject = function () {
     coinHistory: this.coinHistory,
     badges: this.badges,
     rank: this.rank,
+    lastActiveDate: this.lastActiveDate,
+    dailyStreak: this.dailyStreak,
   };
 };
+
+/* ================= INDEXES ================= */
+userSchema.index({ coins: -1, approvedUploads: -1, totalUploads: -1 });
+userSchema.index({ createdAt: -1 });
 
 /* ================= MODEL ================= */
 

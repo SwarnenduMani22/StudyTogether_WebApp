@@ -51,17 +51,23 @@ export const AuthProvider = ({ children }) => {
 
   /* ================= LOGOUT ================= */
 
-  const logout = () => {
-    setUser(null);
-    setToken(null);
+  const logout = async () => {
+    try {
+      await api.post("/auth/logout");
+    } catch (error) {
+      console.error("Logout API error:", error);
+    } finally {
+      setUser(null);
+      setToken(null);
 
-    localStorage.removeItem("user");
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
+      localStorage.removeItem("user");
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
 
-    delete api.defaults.headers.common["Authorization"];
+      delete api.defaults.headers.common["Authorization"];
 
-    window.location.replace("/login");
+      window.location.replace("/login");
+    }
   };
   /* ================= UPDATE USER ================= */
 

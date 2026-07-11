@@ -27,10 +27,12 @@ const Bookmarks = lazy(() => import("./pages/Bookmarks"));
 const UploadPaper = lazy(() => import("./pages/UploadPaper"));
 const Leaderboard = lazy(() => import("./pages/Leaderboard"));
 const Wallet = lazy(() => import("./pages/Wallet"));
+const PublicProfile = lazy(() => import("./pages/PublicProfile"));
 /* ================= COMPONENTS ================= */
 
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import Navbar from "./components/common/Navbar";
+import ChatWidget from "./components/ai/ChatWidget";
 
 /* ================= SCROLL ================= */
 
@@ -87,6 +89,7 @@ export default function App() {
         <ScrollToTop />
 
         <Toaster position="top-right" />
+        <ChatWidget />
 
         <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
           <Navbar />
@@ -113,6 +116,14 @@ export default function App() {
                   element={
                     <ProtectedRoute>
                       <Profile />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/profile/:id"
+                  element={
+                    <ProtectedRoute>
+                      <PublicProfile />
                     </ProtectedRoute>
                   }
                 />

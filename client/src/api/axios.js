@@ -9,6 +9,7 @@ const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
 const api = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
+  withCredentials: true,
 });
 
 /* ================= REQUEST INTERCEPTOR ================= */
@@ -55,9 +56,11 @@ api.interceptors.response.use(
 
         if (!refreshToken) throw new Error("No refresh token");
 
-        const res = await axios.post(`${BASE_URL}/auth/refresh`, {
-          refreshToken,
-        });
+        const res = await axios.post(
+          `${BASE_URL}/auth/refresh`,
+          { refreshToken },
+          { withCredentials: true }
+        );
 
         const newAccessToken = res.data.accessToken;
 

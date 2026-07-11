@@ -10,6 +10,24 @@ export const generateBadgesAndRank = async (userId) => {
   const oldRank = user.rank;
   const oldBadges = user.badges || [];
 
+  const todayStr = new Date().toISOString().split("T")[0];
+  if (!user.lastActiveDate) {
+    user.dailyStreak = 1;
+    user.lastActiveDate = todayStr;
+  } else if (user.lastActiveDate !== todayStr) {
+    const today = new Date(todayStr);
+    const lastActive = new Date(user.lastActiveDate);
+    const diffTime = today.getTime() - lastActive.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 1) {
+      user.dailyStreak = (user.dailyStreak || 0) + 1;
+    } else {
+      user.dailyStreak = 1;
+    }
+    user.lastActiveDate = todayStr;
+  }
+
   const totalUploads = await Paper.countDocuments({ uploadedBy: user._id });
   const approvedUploads = await Paper.countDocuments({ uploadedBy: user._id, status: "approved" });
   const ratingsGiven = await Paper.countDocuments({ "ratings.user": user._id });
@@ -25,6 +43,8 @@ export const generateBadgesAndRank = async (userId) => {
   if (ratingsGiven >= 10) badges.push("📝 Active Reviewer");
   if (commentsGiven >= 10) badges.push("🗣️ Helpful Peer");
   if (downloadedCount >= 20) badges.push("📥 Voracious Reader");
+  if (user.dailyStreak >= 3) badges.push("⚡ 3-Day Streak");
+  if (user.dailyStreak >= 7) badges.push("🔥 7-Day Streak");
 
   const newRank = calculateUserRank(user.coins, approvedUploads);
 

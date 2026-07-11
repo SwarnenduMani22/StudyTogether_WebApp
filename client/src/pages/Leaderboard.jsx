@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import api from "../api/axios";
 
 import Skeleton from "../components/common/Skeleton";
@@ -77,9 +78,12 @@ ${
                 <div className="text-3xl font-bold">{getRankBadge(index)}</div>
 
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
+                  <Link
+                    to={`/profile/${user._id}`}
+                    className="text-lg font-semibold text-gray-800 dark:text-white hover:text-indigo-600 transition"
+                  >
                     {user.name}
-                  </h2>
+                  </Link>
 
                   <div className="flex items-center gap-2 mt-1">
                     <span

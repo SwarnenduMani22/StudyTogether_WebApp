@@ -1,7 +1,7 @@
 import api from "./axios";
 
-export const getCoinOverview = async () => {
-  const response = await api.get("/users/coin-overview");
+export const getCoinOverview = async (page = 1, type = "all", limit = 10) => {
+  const response = await api.get(`/users/coin-overview?page=${page}&type=${type}&limit=${limit}`);
   return response.data;
 };
 

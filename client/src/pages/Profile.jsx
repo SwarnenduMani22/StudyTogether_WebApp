@@ -100,8 +100,8 @@ const Profile = () => {
       return toast.error("Name must be at least 3 characters");
     }
 
-    if (form.password && form.password.length < 6) {
-      return toast.error("Password must be at least 6 characters");
+    if (form.password && form.password.length < 8) {
+      return toast.error("Password must be at least 8 characters");
     }
 
     setLoading(true);

@@ -28,12 +28,14 @@ router.post("/register", async (req, res) => {
 
     if (name.length < 3) {
       return res.status(400).json({
+        success: false,
         error: "Name must be at least 3 characters",
       });
     }
 
     if (password.length < 8) {
       return res.status(400).json({
+        success: false,
         error: "Password must be at least 8 characters",
       });
     }
@@ -104,6 +106,7 @@ router.post("/login", async (req, res) => {
 
     if (!email?.trim() || !password?.trim()) {
       return res.status(400).json({
+        success: false,
         error: "Email and password required",
       });
     }
@@ -116,6 +119,7 @@ router.post("/login", async (req, res) => {
 
     if (!user) {
       return res.status(400).json({
+        success: false,
         error: "Invalid email or password",
       });
     }
@@ -126,6 +130,7 @@ router.post("/login", async (req, res) => {
 
     if (!isMatch) {
       return res.status(400).json({
+        success: false,
         error: "Invalid email or password",
       });
     }
@@ -158,6 +163,12 @@ router.post("/login", async (req, res) => {
     await user.save();
 
     /* ---------- RESPONSE ---------- */
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
 
     res.json({
       success: true,
@@ -182,12 +193,13 @@ REFRESH TOKEN
 
 router.post("/refresh", async (req, res) => {
   try {
-    const { refreshToken } = req.body;
+    const refreshToken = req.cookies?.refreshToken || req.body.refreshToken;
 
     /* ---------- VALIDATION ---------- */
 
     if (!refreshToken) {
       return res.status(401).json({
+        success: false,
         error: "Refresh token missing",
       });
     }
@@ -200,11 +212,13 @@ router.post("/refresh", async (req, res) => {
       decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
       if (decoded.tokenType !== "refresh") {
         return res.status(401).json({
+          success: false,
           error: "Invalid token type",
         });
       }
     } catch {
       return res.status(401).json({
+        success: false,
         error: "Invalid or expired refresh token",
       });
     }
@@ -215,6 +229,7 @@ router.post("/refresh", async (req, res) => {
 
     if (!user || user.refreshToken !== refreshToken) {
       return res.status(401).json({
+        success: false,
         error: "Unauthorized access or token revoked",
       });
     }
@@ -257,6 +272,12 @@ router.post("/logout", verifyToken, async (req, res) => {
       user.refreshToken = null;
       await user.save();
     }
+
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
 
     res.json({
       success: true,

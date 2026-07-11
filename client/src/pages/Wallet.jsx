@@ -39,7 +39,7 @@ const Wallet = () => {
 
       setSelectedPackage(null);
 
-      const updatedOverview = await getCoinOverview();
+      const updatedOverview = await getCoinOverview(currentPage, filter, TRANSACTIONS_PER_PAGE);
 
       setOverview(updatedOverview);
 
@@ -53,9 +53,9 @@ const Wallet = () => {
       toast.error(error?.response?.data?.error || "Purchase failed");
     }
   };
-  const loadWallet = async () => {
+  const loadWallet = async (page = 1, type = "all") => {
     try {
-      const data = await getCoinOverview();
+      const data = await getCoinOverview(page, type, TRANSACTIONS_PER_PAGE);
       setOverview(data);
     } catch (error) {
       console.error("Wallet load failed:", error);
@@ -64,29 +64,15 @@ const Wallet = () => {
     }
   };
   useEffect(() => {
-    loadWallet();
-  }, []);
+    loadWallet(currentPage, filter);
+  }, [currentPage, filter]);
 
   if (loading) {
     return <div>Loading wallet...</div>;
   }
-  const filteredTransactions =
-    filter === "all"
-      ? [...(overview?.transactions || [])]
-      : [...(overview?.transactions || [])].filter(
-          (item) => item.type === filter,
-        );
+  const paginatedTransactions = overview?.transactions || [];
 
-  const sortedTransactions = [...filteredTransactions].reverse();
-
-  const totalPages = Math.ceil(
-    sortedTransactions.length / TRANSACTIONS_PER_PAGE,
-  );
-
-  const paginatedTransactions = sortedTransactions.slice(
-    (currentPage - 1) * TRANSACTIONS_PER_PAGE,
-    currentPage * TRANSACTIONS_PER_PAGE,
-  );
+  const totalPages = overview?.totalPages || 1;
   return (
     <div className="max-w-6xl mx-auto">
       {/* Stats Cards */}
@@ -213,12 +199,12 @@ const Wallet = () => {
 
                   <div
                     className={`font-bold text-lg ${
-                      ["earned", "bonus", "purchase"].includes(item.type)
+                      ["earned", "bonus", "purchase", "purchased", "refund"].includes(item.type)
                         ? "text-green-500"
                         : "text-red-500"
                     }`}
                   >
-                    {["earned", "bonus", "purchase"].includes(item.type)
+                    {["earned", "bonus", "purchase", "purchased", "refund"].includes(item.type)
                       ? "+"
                       : "-"}
                     {item.amount} 🪙

@@ -20,6 +20,7 @@ import userRoutes from "./routes/user.js";
 import adminRoutes from "./routes/admin.js";
 import paperRoutes from "./routes/paper.js";
 import coinRoutes from "./routes/coin.js";
+import aiRoutes from "./routes/ai.js";
 const app = express();
 
 /* ================= ENV VALIDATION ================= */
@@ -34,6 +35,14 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 
+if (!process.env.JWT_REFRESH_SECRET) {
+  console.error("❌ JWT_REFRESH_SECRET missing in .env");
+  process.exit(1);
+}
+
+
+
+
 /* ================= SETTINGS ================= */
 
 app.set("trust proxy", 1);
@@ -46,6 +55,27 @@ app.use(
     credentials: true,
   }),
 );
+
+/* ================= BODY PARSER ================= */
+
+app.use(express.json({ limit: "20mb" }));
+app.use(express.urlencoded({ extended: true }));
+
+/* ================= COOKIE PARSER ================= */
+
+app.use((req, res, next) => {
+  req.cookies = {};
+  const cookieHeader = req.headers.cookie;
+  if (cookieHeader) {
+    cookieHeader.split(";").forEach((cookie) => {
+      const parts = cookie.split("=");
+      if (parts.length === 2) {
+        req.cookies[parts[0].trim()] = decodeURIComponent(parts[1].trim());
+      }
+    });
+  }
+  next();
+});
 
 /* ================= SECURITY ================= */
 
@@ -84,12 +114,34 @@ const authLimiter = rateLimit({
   },
 });
 
+const sensitiveActionLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5, // limit each IP to 5 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: "Too many requests. Please wait a minute and try again.",
+  },
+});
+
 app.use("/api/v1", limiter);
 app.use("/api/v1/auth", authLimiter);
-/* ================= BODY PARSER ================= */
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: "Too many AI Assistant requests. Please slow down and try again.",
+  },
+});
 
-app.use(express.json({ limit: "20mb" }));
-app.use(express.urlencoded({ extended: true }));
+app.use("/api/v1/coins/purchase", sensitiveActionLimiter);
+app.use("/api/v1/papers/upload", sensitiveActionLimiter);
+app.use("/api/v1/ai", aiLimiter);
+
 
 /* ================= LOGGER ================= */
 
@@ -114,6 +166,7 @@ app.use(`${API}/users`, userRoutes);
 app.use(`${API}/papers`, paperRoutes);
 app.use(`${API}/admin`, adminRoutes);
 app.use(`${API}/coins`, coinRoutes);
+app.use(`${API}/ai`, aiRoutes);
 /* ================= HEALTH CHECK ================= */
 
 app.get(`${API}/health`, (req, res) => {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 
 import {
   getPaper,
@@ -262,7 +262,13 @@ const PaperDetails = () => {
 
         {paper.uploadedBy && (
           <p className="text-gray-400 text-sm mb-4">
-            Uploaded by {paper.uploadedBy.name}
+            Uploaded by{" "}
+            <Link
+              to={`/profile/${paper.uploadedBy._id}`}
+              className="text-indigo-600 hover:underline font-semibold"
+            >
+              {paper.uploadedBy.name}
+            </Link>
           </p>
         )}
 
@@ -358,9 +364,12 @@ const PaperDetails = () => {
             >
               <div className="flex justify-between items-center mb-2">
                 <div>
-                  <p className="font-semibold dark:text-white">
+                  <Link
+                    to={`/profile/${c.user?._id}`}
+                    className="font-semibold text-gray-800 dark:text-white hover:text-indigo-600 transition"
+                  >
                     {c.user?.name || "User"}
-                  </p>
+                  </Link>
 
                   <p className="text-xs text-gray-500">
                     {new Date(c.createdAt).toLocaleString()}

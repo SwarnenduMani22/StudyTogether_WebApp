@@ -6,6 +6,8 @@ import verifyAdmin from "../middleware/adminMiddleware.js";
 
 import User from "../models/User.js";
 import Paper from "../models/Paper.js";
+import Transaction from "../models/Transaction.js";
+import PlatformKnowledge from "../models/PlatformKnowledge.js";
 const router = express.Router();
 
 const escapeRegex = (value = "") =>
@@ -204,6 +206,8 @@ router.get("/stats", verifyToken, verifyAdmin, async (req, res) => {
               totalPapers: { $sum: 1 },
               totalViews: { $sum: "$views" },
               totalDownloads: { $sum: "$downloads" },
+              totalComments: { $sum: { $cond: [{ $isArray: "$comments" }, { $size: "$comments" }, 0] } },
+              totalRatings: { $sum: { $cond: [{ $isArray: "$ratings" }, { $size: "$ratings" }, 0] } },
             },
           },
         ]),
@@ -217,6 +221,8 @@ router.get("/stats", verifyToken, verifyAdmin, async (req, res) => {
       totalPapers: 0,
       totalViews: 0,
       totalDownloads: 0,
+      totalComments: 0,
+      totalRatings: 0,
     };
 
     res.json({
@@ -226,6 +232,8 @@ router.get("/stats", verifyToken, verifyAdmin, async (req, res) => {
       papers: paperStats.totalPapers,
       views: paperStats.totalViews,
       downloads: paperStats.totalDownloads,
+      comments: paperStats.totalComments,
+      ratings: paperStats.totalRatings,
       pending: pendingPapers,
       approved: approvedPapers,
     });
@@ -340,55 +348,30 @@ GET /api/v1/admin/coin-analytics
 
 router.get("/coin-analytics", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const analytics = await User.aggregate([
-      {
-        $project: {
-          coins: 1,
-          coinHistory: 1,
-        },
-      },
-
-      {
-        $group: {
-          _id: null,
-
-          totalCoinsInSystem: {
-            $sum: "$coins",
-          },
-
-          allTransactions: {
-            $push: "$coinHistory",
-          },
-        },
-      },
+    const [systemCoinsAgg, purchasedCoinsAgg, spentCoinsAgg, totalTransactions] = await Promise.all([
+      User.aggregate([
+        { $group: { _id: null, total: { $sum: "$coins" } } }
+      ]),
+      Transaction.aggregate([
+        { $match: { type: "purchased" } },
+        { $group: { _id: null, total: { $sum: "$amount" } } }
+      ]),
+      Transaction.aggregate([
+        { $match: { type: "spent" } },
+        { $group: { _id: null, total: { $sum: "$amount" } } }
+      ]),
+      Transaction.countDocuments()
     ]);
 
-    const data = analytics[0] || {
-      totalCoinsInSystem: 0,
-      allTransactions: [],
-    };
-
-    const transactions = data.allTransactions.flat();
-
-    const totalCoinsPurchased = transactions
-      .filter((t) => t.type === "purchase")
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    const totalCoinsSpent = transactions
-      .filter((t) => t.type === "spent")
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    const totalTransactions = transactions.length;
+    const totalCoinsInSystem = systemCoinsAgg[0]?.total || 0;
+    const totalCoinsPurchased = purchasedCoinsAgg[0]?.total || 0;
+    const totalCoinsSpent = spentCoinsAgg[0]?.total || 0;
 
     res.json({
       success: true,
-
-      totalCoinsInSystem: data.totalCoinsInSystem,
-
+      totalCoinsInSystem,
       totalCoinsPurchased,
-
       totalCoinsSpent,
-
       totalTransactions,
     });
   } catch (error) {
@@ -398,6 +381,219 @@ router.get("/coin-analytics", verifyToken, verifyAdmin, async (req, res) => {
       success: false,
       error: "Failed to fetch coin analytics",
     });
+  }
+});
+
+/* =====================================================
+REFUND COINS
+POST /api/v1/admin/users/:id/refund
+===================================================== */
+router.post("/users/:id/refund", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { amount, reason } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid user ID",
+      });
+    }
+
+    const targetUser = await User.findById(userId);
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        error: "User not found",
+      });
+    }
+
+    const refundAmount = Number(amount);
+    if (!Number.isInteger(refundAmount) || refundAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Refund amount must be a positive integer",
+      });
+    }
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: "Refund reason is required",
+      });
+    }
+
+    // Atomic balance update
+    const updatedUser = await User.findOneAndUpdate(
+      { _id: userId },
+      { $inc: { coins: refundAmount } },
+      { new: true }
+    );
+
+    // Log the transaction
+    await Transaction.create({
+      user: userId,
+      amount: refundAmount,
+      type: "refund",
+      reason: reason.trim(),
+    });
+
+    res.json({
+      success: true,
+      message: `Successfully refunded ${refundAmount} coins`,
+      coins: updatedUser.coins,
+    });
+  } catch (error) {
+    console.error("Refund coins error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Refund failed",
+    });
+  }
+});
+
+/* =====================================================
+ADMIN PLATFORM KNOWLEDGE MANAGEMENT
+===================================================== */
+
+// List/Search Knowledge
+router.get("/platform-knowledge", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const { category, status, search } = req.query;
+    const filter = {};
+    if (category) filter.category = category;
+    if (status) filter.status = status;
+    if (search) {
+      filter.$or = [
+        { title: { $regex: escapeRegex(search), $options: "i" } },
+        { content: { $regex: escapeRegex(search), $options: "i" } }
+      ];
+    }
+    const articles = await PlatformKnowledge.find(filter).sort({ updatedAt: -1 });
+    res.json({ success: true, articles });
+  } catch (error) {
+    console.error("❌ Admin platform-knowledge fetch error:", error);
+    res.status(500).json({ success: false, error: "Failed to fetch knowledge articles" });
+  }
+});
+
+// Get Single Article
+router.get("/platform-knowledge/:id", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const article = await PlatformKnowledge.findById(req.params.id);
+    if (!article) return res.status(404).json({ success: false, error: "Article not found" });
+    res.json({ success: true, article });
+  } catch (error) {
+    console.error("❌ Admin platform-knowledge get error:", error);
+    res.status(500).json({ success: false, error: "Failed to fetch article" });
+  }
+});
+
+// Create Knowledge Article
+router.post("/platform-knowledge", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const { title, category, keywords, content, status } = req.body;
+    if (!title || !category || !content) {
+      return res.status(400).json({ success: false, error: "Title, category, and content are required" });
+    }
+    const article = await PlatformKnowledge.create({
+      title,
+      category,
+      keywords: keywords || [],
+      content,
+      status: status || "draft",
+      updatedBy: req.user._id
+    });
+    res.status(201).json({ success: true, message: "Article created successfully", article });
+  } catch (error) {
+    console.error("❌ Admin platform-knowledge create error:", error);
+    res.status(500).json({ success: false, error: "Failed to create article" });
+  }
+});
+
+// Update Knowledge Article
+router.put("/platform-knowledge/:id", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const { title, category, keywords, content } = req.body;
+    const article = await PlatformKnowledge.findById(req.params.id);
+    if (!article) return res.status(404).json({ success: false, error: "Article not found" });
+
+    if (title) article.title = title;
+    if (category) article.category = category;
+    if (keywords) article.keywords = keywords;
+    if (content) article.content = content;
+    article.version += 1;
+    article.updatedBy = req.user._id;
+
+    await article.save();
+    res.json({ success: true, message: "Article updated successfully", article });
+  } catch (error) {
+    console.error("❌ Admin platform-knowledge update error:", error);
+    res.status(500).json({ success: false, error: "Failed to update article" });
+  }
+});
+
+// Delete Knowledge Article
+router.delete("/platform-knowledge/:id", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const result = await PlatformKnowledge.deleteOne({ _id: req.params.id });
+    if (result.deletedCount === 0) return res.status(404).json({ success: false, error: "Article not found" });
+    res.json({ success: true, message: "Article deleted successfully" });
+  } catch (error) {
+    console.error("❌ Admin platform-knowledge delete error:", error);
+    res.status(500).json({ success: false, error: "Failed to delete article" });
+  }
+});
+
+// Patch Status
+router.patch("/platform-knowledge/:id/status", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!["draft", "published", "archived"].includes(status)) {
+      return res.status(400).json({ success: false, error: "Invalid status" });
+    }
+    const article = await PlatformKnowledge.findByIdAndUpdate(
+      req.params.id,
+      { $set: { status, updatedBy: req.user._id } },
+      { new: true }
+    );
+    if (!article) return res.status(404).json({ success: false, error: "Article not found" });
+    res.json({ success: true, message: "Status updated successfully", article });
+  } catch (error) {
+    console.error("❌ Admin platform-knowledge status update error:", error);
+    res.status(500).json({ success: false, error: "Failed to update status" });
+  }
+});
+
+// Patch Publish
+router.patch("/platform-knowledge/:id/publish", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const article = await PlatformKnowledge.findByIdAndUpdate(
+      req.params.id,
+      { $set: { status: "published", updatedBy: req.user._id } },
+      { new: true }
+    );
+    if (!article) return res.status(404).json({ success: false, error: "Article not found" });
+    res.json({ success: true, message: "Article published successfully", article });
+  } catch (error) {
+    console.error("❌ Admin platform-knowledge publish error:", error);
+    res.status(500).json({ success: false, error: "Failed to publish article" });
+  }
+});
+
+// Patch Archive
+router.patch("/platform-knowledge/:id/archive", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const article = await PlatformKnowledge.findByIdAndUpdate(
+      req.params.id,
+      { $set: { status: "archived", updatedBy: req.user._id } },
+      { new: true }
+    );
+    if (!article) return res.status(404).json({ success: false, error: "Article not found" });
+    res.json({ success: true, message: "Article archived successfully", article });
+  } catch (error) {
+    console.error("❌ Admin platform-knowledge archive error:", error);
+    res.status(500).json({ success: false, error: "Failed to archive article" });
   }
 });
 

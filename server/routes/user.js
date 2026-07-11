@@ -33,7 +33,7 @@ router.post("/bookmark/:id", verifyToken, async (req, res) => {
     const paperId = req.params.id;
 
     if (!mongoose.Types.ObjectId.isValid(paperId)) {
-      return res.status(400).json({ error: "Invalid paper ID" });
+      return res.status(400).json({ success: false, error: "Invalid paper ID" });
     }
 
     const paper = await Paper.findById(paperId);
@@ -45,7 +45,7 @@ router.post("/bookmark/:id", verifyToken, async (req, res) => {
     const user = await User.findById(req.user._id);
 
     if (!user) {
-      return res.status(404).json({ error: "User not found" });
+      return res.status(404).json({ success: false, error: "User not found" });
     }
 
     const alreadyBookmarked = user.bookmarks.some(
@@ -73,6 +73,7 @@ router.post("/bookmark/:id", verifyToken, async (req, res) => {
     console.error("Bookmark error:", error);
 
     res.status(500).json({
+      success: false,
       error: "Server error while bookmarking paper",
     });
   }
@@ -183,7 +184,7 @@ router.get("/activity", async (req, res) => {
       
     res.json({ success: true, activities });
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch activity feed" });
+    res.status(500).json({ success: false, error: "Failed to fetch activity feed" });
   }
 });
 
@@ -238,6 +239,7 @@ router.put("/update", verifyToken, async (req, res) => {
 
       if (name.length < 3 || name.length > 50) {
         return res.status(400).json({
+          success: false,
           error: "Name must be between 3 and 50 characters",
         });
       }
@@ -248,17 +250,20 @@ router.put("/update", verifyToken, async (req, res) => {
     if (password) {
       password = password.trim();
 
-      if (password.length < 6) {
+      if (password.length < 8) {
         return res.status(400).json({
-          error: "Password must be at least 6 characters",
+          success: false,
+          error: "Password must be at least 8 characters",
         });
       }
 
       updateData.password = await bcrypt.hash(password, 10);
+      updateData.refreshToken = null; // Invalidate current session/token on password change
     }
 
     if (!Object.keys(updateData).length) {
       return res.status(400).json({
+        success: false,
         error: "Nothing to update",
       });
     }
@@ -277,6 +282,7 @@ router.put("/update", verifyToken, async (req, res) => {
     console.error("Update error:", error);
 
     res.status(500).json({
+      success: false,
       error: "Server error during update",
     });
   }
@@ -349,8 +355,9 @@ router.delete("/delete", verifyToken, async (req, res) => {
 router.get("/coin-overview", verifyToken, async (req, res) => {
   try {
     const page = Math.max(Number(req.query.page) || 1, 1);
-    const limit = 20;
+    const limit = Math.max(Number(req.query.limit) || 10, 1);
     const userId = new mongoose.Types.ObjectId(req.user._id);
+    const filterType = req.query.type || "all";
 
     const user = await User.findById(userId).select("coins");
     if (!user) {
@@ -362,15 +369,24 @@ router.get("/coin-overview", verifyToken, async (req, res) => {
       {
         $group: {
           _id: null,
-          totalEarned: { $sum: { $cond: [{ $in: ["$type", ["earned", "bonus"]] }, "$amount", 0] } },
+          totalEarned: { $sum: { $cond: [{ $in: ["$type", ["earned", "bonus", "refund"]] }, "$amount", 0] } },
           totalSpent: { $sum: { $cond: [{ $eq: ["$type", "spent"] }, "$amount", 0] } },
-          totalPurchased: { $sum: { $cond: [{ $in: ["$type", ["purchased", "purchase"]] }, "$amount", 0] } }
+          totalPurchased: { $sum: { $cond: [{ $eq: ["$type", "purchased"] }, "$amount", 0] } }
         }
       }
     ]);
 
-    const totalTransactions = await Transaction.countDocuments({ user: userId });
-    const transactions = await Transaction.find({ user: userId })
+    const query = { user: userId };
+    if (filterType && filterType !== "all") {
+      if (filterType === "purchased") {
+        query.type = "purchased";
+      } else {
+        query.type = filterType;
+      }
+    }
+
+    const totalTransactions = await Transaction.countDocuments(query);
+    const transactions = await Transaction.find(query)
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
@@ -416,6 +432,7 @@ router.get("/leaderboard", verifyToken, async (req, res) => {
     console.error("Leaderboard error:", error);
 
     res.status(500).json({
+      success: false,
       error: "Failed to fetch leaderboard",
     });
   }

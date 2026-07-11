@@ -14,7 +14,7 @@ const UploadPaper = () => {
 
   const [loading, setLoading] = useState(false);
   const [limitReached, setLimitReached] = useState(false);
-
+  const [isDraftSaving, setIsDraftSaving] = useState(false);
   const [stats, setStats] = useState({
     approved: 0,
     pending: 0,
@@ -88,7 +88,7 @@ const UploadPaper = () => {
 
   /* ================= SUBMIT ================= */
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e, isDraftSubmit = false) => {
     e.preventDefault();
 
     if (!title.trim()) return toast.error("Title required");
@@ -96,7 +96,7 @@ const UploadPaper = () => {
     if (!semester) return toast.error("Select semester");
     if (!file) return toast.error("PDF required");
 
-    if (limitReached && user?.role !== "admin") {
+    if (!isDraftSubmit && limitReached && user?.role !== "admin") {
       return toast.error("Upload limit reached (max 2 pending papers)");
     }
 
@@ -106,18 +106,24 @@ const UploadPaper = () => {
     formData.append("subject", normalizeSubject(subject));
     formData.append("semester", Number(semester));
     formData.append("pdf", file);
+    if (isDraftSubmit) {
+      formData.append("isDraft", "true");
+    }
 
     try {
       setLoading(true);
+      setIsDraftSaving(isDraftSubmit);
       for (const pair of formData.entries()) {
         console.log(pair[0], pair[1]);
       }
       await uploadPaper(formData);
 
       toast.success(
-        user?.role === "admin"
-          ? "Paper uploaded successfully ✅"
-          : "Paper submitted for admin approval ⏳",
+        isDraftSubmit
+          ? "Draft saved successfully ✅"
+          : user?.role === "admin"
+            ? "Paper uploaded successfully ✅"
+            : "Paper submitted for admin approval ⏳",
       );
 
       setTitle("");
@@ -125,7 +131,7 @@ const UploadPaper = () => {
       setSemester("");
       setFile(null);
 
-      if (user?.role !== "admin") {
+      if (!isDraftSubmit && user?.role !== "admin") {
         setStats((prev) => {
           const newPending = prev.pending + 1;
 
@@ -148,6 +154,7 @@ const UploadPaper = () => {
       toast.error(message);
     } finally {
       setLoading(false);
+      setIsDraftSaving(false);
     }
   };
 
@@ -234,16 +241,30 @@ const UploadPaper = () => {
             disabled={limitReached && user?.role !== "admin"}
           />
           <p>{file?.name}</p>
-          <button
-            disabled={loading || (limitReached && user?.role !== "admin")}
-            className="btn-primary w-full"
-          >
-            {loading
-              ? "Uploading..."
-              : user?.role === "admin"
-                ? "Upload Paper"
-                : "Submit for Approval"}
-          </button>
+          <div className="flex gap-4">
+            <button
+              type="submit"
+              onClick={(e) => { e.preventDefault(); handleSubmit(e, false); }}
+              disabled={loading || (limitReached && user?.role !== "admin")}
+              className="btn-primary flex-1"
+            >
+              {loading && !isDraftSaving
+                ? "Uploading..."
+                : user?.role === "admin"
+                  ? "Upload Paper"
+                  : "Submit for Approval"}
+            </button>
+            {user?.role !== "admin" && (
+              <button
+                type="button"
+                onClick={(e) => handleSubmit(e, true)}
+                disabled={loading}
+                className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-xl flex-1 transition"
+              >
+                {loading && isDraftSaving ? "Saving..." : "Save Draft"}
+              </button>
+            )}
+          </div>
         </form>
       </div>
     </div>
