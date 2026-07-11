@@ -14,7 +14,8 @@ import verifyAdmin from "../middleware/adminMiddleware.js";
 import upload from "../middleware/uploadCloudinary.js";
 import { generateBadgesAndRank } from "../services/badgeService.js";
 import { logActivity } from "../services/activityService.js";
-import { processPaper, reprocessPaper, deletePaperKnowledge } from "../services/ai/ingestor.js";
+// AI integration handled via REST API to AI module
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:5001";
 const router = express.Router();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -308,8 +309,12 @@ router.put("/admin/approve/:id", verifyToken, verifyAdmin, async (req, res) => {
       await logActivity(user._id, "upload", `${user.name} published a new paper: ${paper.title}`, paper._id, "Paper");
     }
 
-    // Trigger PDF knowledge ingestion asynchronously
-    processPaper(paper).catch((err) => console.error("Background ingestion error:", err));
+    // Trigger PDF knowledge ingestion asynchronously via AI module API
+    fetch(`${AI_SERVICE_URL}/api/v1/internal/ai/process`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paperId: paper._id }),
+    }).catch((err) => console.error("Background ingestion error:", err));
 
     res.json({
       success: true,
@@ -343,8 +348,10 @@ router.delete("/admin/reject/:id", verifyToken, verifyAdmin, async (req, res) =>
     await paper.deleteOne();
     await logActivity(req.user._id, "reject", `Admin ${req.user.name} rejected paper: ${paper.title}`, null, null);
 
-    // Clean up processed knowledge chunks
-    deletePaperKnowledge(id).catch((err) => console.error("Background delete ingestion error:", err));
+    // Clean up processed knowledge chunks via AI module API
+    fetch(`${AI_SERVICE_URL}/api/v1/internal/ai/knowledge/${id}`, {
+      method: "DELETE",
+    }).catch((err) => console.error("Background delete ingestion error:", err));
 
     res.json({ success: true, message: "Paper rejected and deleted" });
   } catch (error) {
@@ -374,8 +381,12 @@ router.post("/admin/bulk-approve", verifyToken, verifyAdmin, async (req, res) =>
         await generateBadgesAndRank(u._id);
         await logActivity(u._id, "upload", `${u.name} published a new paper: ${paper.title}`, paper._id, "Paper");
       }
-      // Process PDF chunks asynchronously
-      processPaper(paper).catch((err) => console.error("Bulk approved ingestion error:", err));
+      // Process PDF chunks asynchronously via AI module API
+      fetch(`${AI_SERVICE_URL}/api/v1/internal/ai/process`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paperId: paper._id }),
+      }).catch((err) => console.error("Bulk approved ingestion error:", err));
       approvedCount++;
     }
 
@@ -400,8 +411,10 @@ router.post("/admin/bulk-reject", verifyToken, verifyAdmin, async (req, res) => 
       await paper.deleteOne();
       await logActivity(req.user._id, "reject", `Admin ${req.user.name} rejected paper: ${paper.title}`, null, null);
       
-      // Clean up chunks
-      deletePaperKnowledge(paper._id).catch((err) => console.error("Bulk rejected delete ingestion error:", err));
+      // Clean up chunks via AI module API
+      fetch(`${AI_SERVICE_URL}/api/v1/internal/ai/knowledge/${paper._id}`, {
+        method: "DELETE",
+      }).catch((err) => console.error("Bulk rejected delete ingestion error:", err));
       rejectedCount++;
     }
 
@@ -608,6 +621,7 @@ router.post("/:id/view", verifyToken, async (req, res, next) => {
         }
 
         user.previewedPapers.push(paper._id);
+        await User.findByIdAndUpdate(user._id, { $addToSet: { previewedPapers: paper._id } });
 
         await spendCoins(user, 10, "Preview Paper", paper._id, paper.title);
       }
@@ -690,6 +704,7 @@ router.post("/:id/download", verifyToken, async (req, res, next) => {
         }
 
         user.downloadedPapers.push(paper._id);
+        await User.findByIdAndUpdate(user._id, { $addToSet: { downloadedPapers: paper._id } });
 
         await spendCoins(
           user,

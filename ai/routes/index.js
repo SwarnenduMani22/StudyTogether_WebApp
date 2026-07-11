@@ -2,21 +2,57 @@ import express from "express";
 import verifyToken from "../middleware/authMiddleware.js";
 import verifyAdmin from "../middleware/adminMiddleware.js";
 import AIChatSession from "../models/AIChatSession.js";
-import { queryPlatformAssistant, queryStudyAssistant, detectIntent } from "../services/ai/index.js";
-import { searchSimilarity, rebuildVectorIndex } from "../services/ai/vectorSearch.js";
-import { getPlatformResponse } from "../services/ai/promptTemplates.js";
-import { getConversationHistory, enrichQueryWithContext, getUserPreferences } from "../services/ai/memoryService.js";
-import { generateStudyNotes, generateQuiz, generateFlashcards, generateExamPlan, analyzeTopics } from "../services/ai/learningService.js";
+import {
+  queryPlatformAssistant,
+  queryStudyAssistant,
+  detectIntent,
+} from "../services/index.js";
+import {
+  searchSimilarity,
+  rebuildVectorIndex,
+} from "../services/vectorSearch.js";
+import { getPlatformResponse } from "../services/promptTemplates.js";
+import {
+  getConversationHistory,
+  enrichQueryWithContext,
+  getUserPreferences,
+} from "../services/memoryService.js";
+import {
+  generateStudyNotes,
+  generateQuiz,
+  generateFlashcards,
+  generateExamPlan,
+  analyzeTopics,
+} from "../services/learningService.js";
 import AICopilotProfile from "../models/AICopilotProfile.js";
 import Paper from "../models/Paper.js";
 import AIFeedback from "../models/AIFeedback.js";
 import AIChatChunk from "../models/AIChatChunk.js";
-import { switchModel, getCurrentModel, checkOllamaHealth, checkModelAvailability } from "../services/ai/modelManager.js";
-import { queryOllamaStream } from "../services/ai/ollamaService.js";
-import { getAIProvider } from "../services/ai/providers.js";
-import { detectPromptInjection } from "../services/ai/promptManager.js";
+import {
+  switchModel,
+  getCurrentModel,
+  checkOllamaHealth,
+  checkModelAvailability,
+} from "../services/modelManager.js";
+import { queryOllamaStream } from "../services/ollamaService.js";
+import { getAIProvider } from "../services/providers.js";
+import { detectPromptInjection } from "../services/promptManager.js";
 
 const router = express.Router();
+
+// Middleware to check if AI features are enabled. Excludes /status and /health.
+router.use((req, res, next) => {
+  if (req.path === "/status" || req.path === "/health") {
+    return next();
+  }
+  if (process.env.AI_PROVIDER === "disabled") {
+    return res.status(403).json({
+      success: false,
+      error: "AI Features are currently disabled",
+    });
+  }
+  next();
+});
 
 /* =================================================
 CONVERSATION INITIALIZATION
@@ -38,7 +74,8 @@ const handleConversationInit = async (req, res) => {
       user: req.user._id,
       domain,
       paper: paperId || null,
-      title: domain === "platform" ? "Platform Help Chat" : "Study Paper Assistant",
+      title:
+        domain === "platform" ? "Platform Help Chat" : "Study Paper Assistant",
     });
 
     res.status(201).json({
@@ -48,7 +85,9 @@ const handleConversationInit = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ AI Conversation init error:", error);
-    res.status(500).json({ success: false, error: "Failed to initialize conversation" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to initialize conversation" });
   }
 };
 
@@ -72,7 +111,10 @@ router.post("/chat", verifyToken, async (req, res) => {
 
     let session;
     if (conversationId) {
-      session = await AIChatSession.findOne({ _id: conversationId, user: req.user._id });
+      session = await AIChatSession.findOne({
+        _id: conversationId,
+        user: req.user._id,
+      });
     }
 
     // Fallback: create session if not specified
@@ -85,7 +127,9 @@ router.post("/chat", verifyToken, async (req, res) => {
       });
     }
 
-    const history = session._id ? await getConversationHistory(session._id) : [];
+    const history = session._id
+      ? await getConversationHistory(session._id)
+      : [];
     const enrichedQuery = enrichQueryWithContext(message, history);
     const userPref = await getUserPreferences(req.user._id);
 
@@ -100,7 +144,7 @@ router.post("/chat", verifyToken, async (req, res) => {
     const aiResponse = await provider.chat(enrichedQuery, session, {
       history,
       userPref,
-      paperId
+      paperId,
     });
 
     const assistantMessage = {
@@ -111,7 +155,10 @@ router.post("/chat", verifyToken, async (req, res) => {
     session.messages.push(assistantMessage);
 
     // Keep message history within reasonable bounds to prevent indefinite DB growth
-    const MAX_SESSION_MESSAGES = parseInt(process.env.MAX_SESSION_MESSAGES || "50", 10);
+    const MAX_SESSION_MESSAGES = parseInt(
+      process.env.MAX_SESSION_MESSAGES || "50",
+      10,
+    );
     if (session.messages.length > MAX_SESSION_MESSAGES) {
       session.messages = session.messages.slice(-MAX_SESSION_MESSAGES);
     }
@@ -131,7 +178,9 @@ router.post("/chat", verifyToken, async (req, res) => {
     });
   } catch (error) {
     console.error("❌ AI Chat error:", error);
-    res.status(500).json({ success: false, error: "Failed to process chat message" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to process chat message" });
   }
 });
 
@@ -143,16 +192,26 @@ router.post("/chat/stream", verifyToken, async (req, res) => {
     const { conversationId, message, paperId } = req.body;
 
     if (!message || !message.trim()) {
-      return res.status(400).json({ success: false, error: "Message content required" });
+      return res
+        .status(400)
+        .json({ success: false, error: "Message content required" });
     }
 
     if (detectPromptInjection(message)) {
-      return res.status(403).json({ success: false, error: "Security Policy Violation: Prompt injection detected." });
+      return res
+        .status(403)
+        .json({
+          success: false,
+          error: "Security Policy Violation: Prompt injection detected.",
+        });
     }
 
     let session;
     if (conversationId) {
-      session = await AIChatSession.findOne({ _id: conversationId, user: req.user._id });
+      session = await AIChatSession.findOne({
+        _id: conversationId,
+        user: req.user._id,
+      });
     }
     if (!session) {
       session = await AIChatSession.create({
@@ -163,7 +222,9 @@ router.post("/chat/stream", verifyToken, async (req, res) => {
       });
     }
 
-    const history = session._id ? await getConversationHistory(session._id) : [];
+    const history = session._id
+      ? await getConversationHistory(session._id)
+      : [];
     const enrichedQuery = enrichQueryWithContext(message, history);
     const userPref = await getUserPreferences(req.user._id);
 
@@ -177,17 +238,39 @@ router.post("/chat/stream", verifyToken, async (req, res) => {
     let sources = [];
     let confidence = 1.0;
 
-    const targetDomain = paperId || session.paper ? "study" : detectIntent(message);
+    const targetDomain =
+      paperId || session.paper ? "study" : detectIntent(message);
     if (targetDomain === "study") {
-      const chunks = await searchSimilarity(enrichedQuery, { paperId: session.paper || paperId }, 2);
+      const chunks = await searchSimilarity(
+        enrichedQuery,
+        { paperId: session.paper || paperId },
+        2,
+      );
       if (chunks.length > 0) {
-        matchText = chunks.map(c => `[Page ${c.pageNumber}] ${c.chunkText}`).join("\n\n");
-        citations = chunks.map(c => ({ chunkId: c.chunkId, pageNumber: c.pageNumber, textSnippet: c.chunkText }));
-        sources = [{ fileName: "Document.pdf", pages: [...new Set(chunks.map(c => c.pageNumber))] }];
+        matchText = chunks
+          .map((c) => `[Page ${c.pageNumber}] ${c.chunkText}`)
+          .join("\n\n");
+        citations = chunks.map((c) => ({
+          chunkId: c.chunkId,
+          pageNumber: c.pageNumber,
+          textSnippet: c.chunkText,
+        }));
+        sources = [
+          {
+            fileName: "Document.pdf",
+            pages: [...new Set(chunks.map((c) => c.pageNumber))],
+          },
+        ];
         confidence = chunks[0].score || 0.85;
       }
-      const userContext = userPref.rank ? `User Rank: ${userPref.rank}, Streak: ${userPref.streak} days.` : "";
-      const historyText = history.map(h => `${h.sender === "user" ? "User" : "Assistant"}: ${h.content}`).join("\n");
+      const userContext = userPref.rank
+        ? `User Rank: ${userPref.rank}, Streak: ${userPref.streak} days.`
+        : "";
+      const historyText = history
+        .map(
+          (h) => `${h.sender === "user" ? "User" : "Assistant"}: ${h.content}`,
+        )
+        .join("\n");
 
       prompt = `You are a Study Assistant. Answer the question based on the provided document context excerpt below. Cite page numbers using [Page X] where appropriate.
       
@@ -206,8 +289,14 @@ Answer:`;
       const match = getPlatformResponse(enrichedQuery);
       matchText = match.answer;
       confidence = match.confidence;
-      const historyText = history.map(h => `${h.sender === "user" ? "User" : "Assistant"}: ${h.content}`).join("\n");
-      const userContext = userPref.rank ? `User Rank: ${userPref.rank}, Streak: ${userPref.streak} days.` : "";
+      const historyText = history
+        .map(
+          (h) => `${h.sender === "user" ? "User" : "Assistant"}: ${h.content}`,
+        )
+        .join("\n");
+      const userContext = userPref.rank
+        ? `User Rank: ${userPref.rank}, Streak: ${userPref.streak} days.`
+        : "";
 
       prompt = `You are the Platform Helpdesk Assistant for StudyTogether. Explain the following feature based on this description:
       
@@ -231,8 +320,12 @@ Answer:`;
 
     const providerType = process.env.AI_PROVIDER || "ollama";
     if (providerType === "disabled") {
-      res.write(`data: ${JSON.stringify({ token: "The AI Copilot service is currently offline or disabled by the system administrator." })}\n\n`);
-      res.write(`data: ${JSON.stringify({ done: true, conversationId: session._id, citations: [], sources: [], confidence: 0.0 })}\n\n`);
+      res.write(
+        `data: ${JSON.stringify({ token: "The AI Copilot service is currently offline or disabled by the system administrator." })}\n\n`,
+      );
+      res.write(
+        `data: ${JSON.stringify({ done: true, conversationId: session._id, citations: [], sources: [], confidence: 0.0 })}\n\n`,
+      );
       res.end();
       return;
     }
@@ -245,20 +338,31 @@ Answer:`;
     });
 
     let completeAnswer = "";
-    
+
     // Stream Ollama response
-    await queryOllamaStream(prompt, (chunk) => {
-      completeAnswer += chunk;
-      res.write(`data: ${JSON.stringify({ token: chunk })}\n\n`);
-    }, {
-      signal: controller.signal
-    });
+    await queryOllamaStream(
+      prompt,
+      (chunk) => {
+        completeAnswer += chunk;
+        res.write(`data: ${JSON.stringify({ token: chunk })}\n\n`);
+      },
+      {
+        signal: controller.signal,
+      },
+    );
 
     // Save Assistant message
-    session.messages.push({ sender: "assistant", content: completeAnswer, citations });
+    session.messages.push({
+      sender: "assistant",
+      content: completeAnswer,
+      citations,
+    });
 
     // Keep message history within reasonable bounds to prevent indefinite DB growth
-    const MAX_SESSION_MESSAGES = parseInt(process.env.MAX_SESSION_MESSAGES || "50", 10);
+    const MAX_SESSION_MESSAGES = parseInt(
+      process.env.MAX_SESSION_MESSAGES || "50",
+      10,
+    );
     if (session.messages.length > MAX_SESSION_MESSAGES) {
       session.messages = session.messages.slice(-MAX_SESSION_MESSAGES);
     }
@@ -266,21 +370,26 @@ Answer:`;
     await session.save();
 
     // Send final event packet
-    res.write(`data: ${JSON.stringify({
-      done: true,
-      conversationId: session._id,
-      citations,
-      sources,
-      confidence
-    })}\n\n`);
+    res.write(
+      `data: ${JSON.stringify({
+        done: true,
+        conversationId: session._id,
+        citations,
+        sources,
+        confidence,
+      })}\n\n`,
+    );
     res.end();
-
   } catch (error) {
     console.error("❌ AI Streaming error:", error);
     if (!res.headersSent) {
-      res.status(500).json({ success: false, error: "Streaming processing failed" });
+      res
+        .status(500)
+        .json({ success: false, error: "Streaming processing failed" });
     } else {
-      res.write(`data: ${JSON.stringify({ error: "Streaming interrupted" })}\n\n`);
+      res.write(
+        `data: ${JSON.stringify({ error: "Streaming interrupted" })}\n\n`,
+      );
       res.end();
     }
   }
@@ -301,7 +410,9 @@ router.get("/history", verifyToken, async (req, res) => {
     });
   } catch (error) {
     console.error("❌ AI History fetch error:", error);
-    res.status(500).json({ success: false, error: "Failed to load chat history" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to load chat history" });
   }
 });
 
@@ -312,14 +423,21 @@ GET SINGLE CONVERSATION BY ID
 ================================================= */
 router.get("/conversations/:id", verifyToken, async (req, res) => {
   try {
-    const session = await AIChatSession.findOne({ _id: req.params.id, user: req.user._id });
+    const session = await AIChatSession.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
     if (!session) {
-      return res.status(404).json({ success: false, error: "Conversation not found" });
+      return res
+        .status(404)
+        .json({ success: false, error: "Conversation not found" });
     }
     res.json({ success: true, conversation: session });
   } catch (error) {
     console.error("❌ AI Get Conversation error:", error);
-    res.status(500).json({ success: false, error: "Failed to fetch conversation" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to fetch conversation" });
   }
 });
 
@@ -328,14 +446,21 @@ DELETE & CLEAR CONVERSATIONS
 ================================================= */
 router.delete("/history/:id", verifyToken, async (req, res) => {
   try {
-    const result = await AIChatSession.deleteOne({ _id: req.params.id, user: req.user._id });
+    const result = await AIChatSession.deleteOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
     if (result.deletedCount === 0) {
-      return res.status(404).json({ success: false, error: "Conversation not found" });
+      return res
+        .status(404)
+        .json({ success: false, error: "Conversation not found" });
     }
     res.json({ success: true, message: "Conversation deleted successfully" });
   } catch (error) {
     console.error("❌ AI History delete error:", error);
-    res.status(500).json({ success: false, error: "Failed to delete conversation" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to delete conversation" });
   }
 });
 
@@ -344,10 +469,16 @@ router.delete("/history/:id", verifyToken, async (req, res) => {
 router.delete("/conversations", verifyToken, async (req, res) => {
   try {
     const result = await AIChatSession.deleteMany({ user: req.user._id });
-    res.json({ success: true, message: "All conversations cleared successfully", deletedCount: result.deletedCount });
+    res.json({
+      success: true,
+      message: "All conversations cleared successfully",
+      deletedCount: result.deletedCount,
+    });
   } catch (error) {
     console.error("❌ AI Clear Conversations error:", error);
-    res.status(500).json({ success: false, error: "Failed to clear conversations" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to clear conversations" });
   }
 });
 
@@ -364,7 +495,9 @@ router.post("/reindex", verifyToken, verifyAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error("❌ AI Reindex error:", error);
-    res.status(500).json({ success: false, error: "Failed to rebuild vector index" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to rebuild vector index" });
   }
 });
 
@@ -374,12 +507,17 @@ AI STUDY NOTES GENERATOR
 router.post("/study-notes", verifyToken, async (req, res) => {
   try {
     const { paperId, topic } = req.body;
-    if (!paperId || !topic) return res.status(400).json({ success: false, error: "paperId and topic required" });
+    if (!paperId || !topic)
+      return res
+        .status(400)
+        .json({ success: false, error: "paperId and topic required" });
     const notes = await generateStudyNotes(paperId, topic);
     res.json({ success: true, notes });
   } catch (error) {
     console.error("❌ AI Study Notes error:", error);
-    res.status(500).json({ success: false, error: "Failed to generate study notes" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to generate study notes" });
   }
 });
 
@@ -389,7 +527,10 @@ AI QUIZ GENERATOR
 router.post("/quiz", verifyToken, async (req, res) => {
   try {
     const { paperId, type, count } = req.body;
-    if (!paperId) return res.status(400).json({ success: false, error: "paperId required" });
+    if (!paperId)
+      return res
+        .status(400)
+        .json({ success: false, error: "paperId required" });
     const quiz = await generateQuiz(paperId, type || "mcq", count || 5);
     res.json({ success: true, quiz });
   } catch (error) {
@@ -404,12 +545,17 @@ AI FLASHCARDS GENERATOR
 router.post("/flashcards", verifyToken, async (req, res) => {
   try {
     const { paperId } = req.body;
-    if (!paperId) return res.status(400).json({ success: false, error: "paperId required" });
+    if (!paperId)
+      return res
+        .status(400)
+        .json({ success: false, error: "paperId required" });
     const flashcards = await generateFlashcards(paperId);
     res.json({ success: true, flashcards });
   } catch (error) {
     console.error("❌ AI Flashcards error:", error);
-    res.status(500).json({ success: false, error: "Failed to generate flashcards" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to generate flashcards" });
   }
 });
 
@@ -419,12 +565,21 @@ AI EXAM PLANNER
 router.post("/exam-plan", verifyToken, async (req, res) => {
   try {
     const { paperId, timeAvailable } = req.body;
-    if (!paperId) return res.status(400).json({ success: false, error: "paperId required" });
-    const plan = await generateExamPlan(paperId, timeAvailable || "2 hours", req.user._id);
+    if (!paperId)
+      return res
+        .status(400)
+        .json({ success: false, error: "paperId required" });
+    const plan = await generateExamPlan(
+      paperId,
+      timeAvailable || "2 hours",
+      req.user._id,
+    );
     res.json({ success: true, plan });
   } catch (error) {
     console.error("❌ AI Exam Plan error:", error);
-    res.status(500).json({ success: false, error: "Failed to generate exam plan" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to generate exam plan" });
   }
 });
 
@@ -434,7 +589,10 @@ AI TOPIC ANALYSIS
 router.post("/topic-analysis", verifyToken, async (req, res) => {
   try {
     const { paperId } = req.body;
-    if (!paperId) return res.status(400).json({ success: false, error: "paperId required" });
+    if (!paperId)
+      return res
+        .status(400)
+        .json({ success: false, error: "paperId required" });
     const analysis = await analyzeTopics(paperId);
     res.json({ success: true, analysis });
   } catch (error) {
@@ -450,12 +608,19 @@ router.get("/copilot/profile", verifyToken, async (req, res) => {
   try {
     let profile = await AICopilotProfile.findOne({ user: req.user._id });
     if (!profile) {
-      profile = await AICopilotProfile.create({ user: req.user._id, studiedPapers: [], completedTopics: [], quizHistory: [] });
+      profile = await AICopilotProfile.create({
+        user: req.user._id,
+        studiedPapers: [],
+        completedTopics: [],
+        quizHistory: [],
+      });
     }
     res.json({ success: true, profile });
   } catch (error) {
     console.error("❌ AI Copilot Profile error:", error);
-    res.status(500).json({ success: false, error: "Failed to load copilot profile" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to load copilot profile" });
   }
 });
 
@@ -467,7 +632,12 @@ router.post("/copilot/track-progress", verifyToken, async (req, res) => {
     const { paperId, topic } = req.body;
     let profile = await AICopilotProfile.findOne({ user: req.user._id });
     if (!profile) {
-      profile = await AICopilotProfile.create({ user: req.user._id, studiedPapers: [], completedTopics: [], quizHistory: [] });
+      profile = await AICopilotProfile.create({
+        user: req.user._id,
+        studiedPapers: [],
+        completedTopics: [],
+        quizHistory: [],
+      });
     }
 
     if (paperId && !profile.studiedPapers.includes(paperId)) {
@@ -478,7 +648,11 @@ router.post("/copilot/track-progress", verifyToken, async (req, res) => {
     }
     await profile.save();
 
-    res.json({ success: true, message: "Progress tracked successfully", profile });
+    res.json({
+      success: true,
+      message: "Progress tracked successfully",
+      profile,
+    });
   } catch (error) {
     console.error("❌ AI Copilot Track Progress error:", error);
     res.status(500).json({ success: false, error: "Failed to save progress" });
@@ -492,12 +666,22 @@ router.post("/copilot/quiz-score", verifyToken, async (req, res) => {
   try {
     const { paperId, score, totalQuestions } = req.body;
     if (!paperId || score === undefined || !totalQuestions) {
-      return res.status(400).json({ success: false, error: "paperId, score, and totalQuestions are required" });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          error: "paperId, score, and totalQuestions are required",
+        });
     }
 
     let profile = await AICopilotProfile.findOne({ user: req.user._id });
     if (!profile) {
-      profile = await AICopilotProfile.create({ user: req.user._id, studiedPapers: [], completedTopics: [], quizHistory: [] });
+      profile = await AICopilotProfile.create({
+        user: req.user._id,
+        studiedPapers: [],
+        completedTopics: [],
+        quizHistory: [],
+      });
     }
 
     profile.quizHistory.push({ paperId, score, totalQuestions });
@@ -506,7 +690,9 @@ router.post("/copilot/quiz-score", verifyToken, async (req, res) => {
     res.json({ success: true, message: "Quiz performance saved", profile });
   } catch (error) {
     console.error("❌ AI Copilot Quiz Score log error:", error);
-    res.status(500).json({ success: false, error: "Failed to save quiz score" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to save quiz score" });
   }
 });
 
@@ -531,8 +717,11 @@ router.get("/copilot/recommendations", verifyToken, async (req, res) => {
       status: "approved",
       isActive: true,
       _id: { $nin: studiedPaperIds },
-      subject: favoriteSubject
-    }).limit(4).select("_id title subject semester").lean();
+      subject: favoriteSubject,
+    })
+      .limit(4)
+      .select("_id title subject semester")
+      .lean();
 
     res.json({
       success: true,
@@ -541,7 +730,9 @@ router.get("/copilot/recommendations", verifyToken, async (req, res) => {
     });
   } catch (error) {
     console.error("❌ AI Copilot Recommendations error:", error);
-    res.status(500).json({ success: false, error: "Failed to generate recommendations" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to generate recommendations" });
   }
 });
 
@@ -550,7 +741,9 @@ AI COPILOT: ANALYTICS DASHBOARD
 ================================================= */
 router.get("/copilot/dashboard", verifyToken, async (req, res) => {
   try {
-    const profile = await AICopilotProfile.findOne({ user: req.user._id }).lean();
+    const profile = await AICopilotProfile.findOne({
+      user: req.user._id,
+    }).lean();
 
     const studiedCount = profile ? profile.studiedPapers.length : 0;
     const completedCount = profile ? profile.completedTopics.length : 0;
@@ -558,7 +751,10 @@ router.get("/copilot/dashboard", verifyToken, async (req, res) => {
 
     let averageQuizScore = 0;
     if (quizCount > 0) {
-      const sum = profile.quizHistory.reduce((acc, q) => acc + (q.score / q.totalQuestions), 0);
+      const sum = profile.quizHistory.reduce(
+        (acc, q) => acc + q.score / q.totalQuestions,
+        0,
+      );
       averageQuizScore = Math.round((sum / quizCount) * 100);
     }
 
@@ -572,13 +768,15 @@ router.get("/copilot/dashboard", verifyToken, async (req, res) => {
         studyStreak: profile ? profile.studyStreak : 0,
         subjectWiseProgress: {
           "Data Structure": Math.min(completedCount * 10, 100),
-          "Operating System": Math.min(studiedCount * 15, 100)
-        }
-      }
+          "Operating System": Math.min(studiedCount * 15, 100),
+        },
+      },
     });
   } catch (error) {
     console.error("❌ AI Copilot Dashboard error:", error);
-    res.status(500).json({ success: false, error: "Failed to build analytics dashboard" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to build analytics dashboard" });
   }
 });
 
@@ -588,19 +786,26 @@ AI FEEDBACK COLLECTION
 router.post("/feedback", verifyToken, async (req, res) => {
   try {
     const { conversationId, score, comment } = req.body;
-    if (score === undefined) return res.status(400).json({ success: false, error: "score required" });
+    if (score === undefined)
+      return res.status(400).json({ success: false, error: "score required" });
 
     const feedback = await AIFeedback.create({
       user: req.user._id,
       conversationId: conversationId || null,
       score,
-      comment
+      comment,
     });
 
-    res.json({ success: true, message: "Feedback submitted successfully", feedback });
+    res.json({
+      success: true,
+      message: "Feedback submitted successfully",
+      feedback,
+    });
   } catch (error) {
     console.error("❌ AI Feedback error:", error);
-    res.status(500).json({ success: false, error: "Failed to submit feedback" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to submit feedback" });
   }
 });
 
@@ -624,12 +829,17 @@ router.get("/health", async (req, res) => {
 
   res.json({
     success: true,
-    status: providerType === "disabled" ? "disabled" : ollamaReachable ? "ok" : "degraded",
+    status:
+      providerType === "disabled"
+        ? "disabled"
+        : ollamaReachable
+          ? "ok"
+          : "degraded",
     timestamp: Date.now(),
     provider: providerType,
     model: currentModel,
     ollamaUrl,
-    ollamaReachable
+    ollamaReachable,
   });
 });
 
@@ -646,11 +856,15 @@ router.get("/study-knowledge", verifyToken, async (req, res) => {
     if (semester) filter.semester = Number(semester);
     if (university) filter.university = university;
 
-    const chunks = await AIChatChunk.find(filter).limit(50).select("-embedding");
+    const chunks = await AIChatChunk.find(filter)
+      .limit(50)
+      .select("-embedding");
     res.json({ success: true, count: chunks.length, chunks });
   } catch (error) {
     console.error("❌ AI Study Knowledge fetch error:", error);
-    res.status(500).json({ success: false, error: "Failed to fetch study knowledge" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to fetch study knowledge" });
   }
 });
 
@@ -666,45 +880,63 @@ router.get("/study-knowledge/search", verifyToken, async (req, res) => {
       filter.chunkText = { $regex: q.trim(), $options: "i" };
     }
 
-    const chunks = await AIChatChunk.find(filter).limit(30).select("-embedding");
+    const chunks = await AIChatChunk.find(filter)
+      .limit(30)
+      .select("-embedding");
     res.json({ success: true, count: chunks.length, chunks });
   } catch (error) {
     console.error("❌ AI Study Knowledge search error:", error);
-    res.status(500).json({ success: false, error: "Failed to search study knowledge" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to search study knowledge" });
   }
 });
 
 // Rebuild Study Knowledge Chunks Index
-router.post("/study-knowledge/rebuild", verifyToken, verifyAdmin, async (req, res) => {
-  try {
-    const status = await rebuildVectorIndex();
-    res.json({
-      success: true,
-      message: "Study knowledge index rebuild completed successfully",
-      status
-    });
-  } catch (error) {
-    console.error("❌ AI Study Knowledge rebuild error:", error);
-    res.status(500).json({ success: false, error: "Failed to rebuild study knowledge" });
-  }
-});
+router.post(
+  "/study-knowledge/rebuild",
+  verifyToken,
+  verifyAdmin,
+  async (req, res) => {
+    try {
+      const status = await rebuildVectorIndex();
+      res.json({
+        success: true,
+        message: "Study knowledge index rebuild completed successfully",
+        status,
+      });
+    } catch (error) {
+      console.error("❌ AI Study Knowledge rebuild error:", error);
+      res
+        .status(500)
+        .json({ success: false, error: "Failed to rebuild study knowledge" });
+    }
+  },
+);
 
 // Get Single Study Knowledge Chunk by ID
 router.get("/study-knowledge/:id", verifyToken, async (req, res) => {
   try {
-    const chunk = await AIChatChunk.findById(req.params.id).select("-embedding");
-    if (!chunk) return res.status(404).json({ success: false, error: "Study knowledge chunk not found" });
+    const chunk = await AIChatChunk.findById(req.params.id).select(
+      "-embedding",
+    );
+    if (!chunk)
+      return res
+        .status(404)
+        .json({ success: false, error: "Study knowledge chunk not found" });
     res.json({ success: true, chunk });
   } catch (error) {
     console.error("❌ AI Study Knowledge get error:", error);
-    res.status(500).json({ success: false, error: "Failed to fetch study knowledge chunk" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to fetch study knowledge chunk" });
   }
 });
 
 /* =================================================
 AI STATUS ENDPOINT (P2-008)
 ================================================= */
-router.get("/status", verifyToken, async (req, res) => {
+router.get("/status", async (req, res) => {
   try {
     const provider = process.env.AI_PROVIDER || "ollama";
     const embeddingModel = process.env.EMBEDDING_MODEL || "nomic-embed-text";
@@ -733,7 +965,8 @@ router.get("/status", verifyToken, async (req, res) => {
     const chunkCount = await AIChatChunk.countDocuments();
 
     // 3. Retrieval Status
-    const retrievalStatus = (provider === "ollama" && ollamaReachable) ? "active" : "disabled";
+    const retrievalStatus =
+      provider === "ollama" && ollamaReachable ? "active" : "disabled";
 
     // 4. BM25 Status
     const bm25Status = "active";
@@ -779,14 +1012,14 @@ router.get("/status", verifyToken, async (req, res) => {
       aiReadiness,
       environment: process.env.NODE_ENV || "development",
       uptime: process.uptime(),
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
   } catch (error) {
     console.error("❌ AI Status endpoint error:", error);
     res.status(500).json({
       success: false,
       error: "Failed to query AI status",
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -811,12 +1044,14 @@ router.get("/models", verifyToken, async (req, res) => {
       modelAvailability: {
         mistral: mistralAvail.isAvailable,
         llama3: llamaAvail.isAvailable,
-        phi3: phiAvail.isAvailable
-      }
+        phi3: phiAvail.isAvailable,
+      },
     });
   } catch (error) {
     console.error("❌ AI Models fetch error:", error);
-    res.status(500).json({ success: false, error: "Failed to fetch model manager status" });
+    res
+      .status(500)
+      .json({ success: false, error: "Failed to fetch model manager status" });
   }
 });
 
@@ -824,10 +1059,17 @@ router.get("/models", verifyToken, async (req, res) => {
 router.post("/models/switch", verifyToken, verifyAdmin, async (req, res) => {
   try {
     const { model } = req.body;
-    if (!model) return res.status(400).json({ success: false, error: "model name required" });
+    if (!model)
+      return res
+        .status(400)
+        .json({ success: false, error: "model name required" });
 
     const result = switchModel(model);
-    res.json({ success: true, message: `Active model switched to ${model}`, currentModel: result.currentModel });
+    res.json({
+      success: true,
+      message: `Active model switched to ${model}`,
+      currentModel: result.currentModel,
+    });
   } catch (error) {
     console.error("❌ AI Model switch error:", error);
     res.status(500).json({ success: false, error: error.message });

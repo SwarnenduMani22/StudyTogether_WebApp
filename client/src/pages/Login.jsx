@@ -46,13 +46,10 @@ const Login = () => {
 
       const user = res?.data?.user;
       const accessToken = res?.data?.accessToken;
-      const refreshToken = res?.data?.refreshToken;
 
-      if (!user || !accessToken || !refreshToken) {
+      if (!user || !accessToken) {
         throw new Error("Invalid server response");
       }
-      // 🔥 IMPORTANT
-      localStorage.setItem("refreshToken", refreshToken);
 
       login(user, accessToken); // context login
 

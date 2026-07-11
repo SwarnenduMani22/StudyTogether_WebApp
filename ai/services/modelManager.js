@@ -1,4 +1,4 @@
-let currentModel = "mistral";
+let currentModel = process.env.OLLAMA_MODEL || "mistral";
 const SUPPORTED_MODELS = ["mistral", "phi3", "llama3"];
 
 // Fetch with Timeout and Retry Capabilities

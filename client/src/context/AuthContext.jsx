@@ -29,7 +29,6 @@ export const AuthProvider = ({ children }) => {
 
       localStorage.removeItem("user");
       localStorage.removeItem("accessToken");
-      localStorage.removeItem("refreshToken");
     } finally {
       setLoading(false);
     }
@@ -62,7 +61,6 @@ export const AuthProvider = ({ children }) => {
 
       localStorage.removeItem("user");
       localStorage.removeItem("accessToken");
-      localStorage.removeItem("refreshToken");
 
       delete api.defaults.headers.common["Authorization"];
 

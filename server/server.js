@@ -20,7 +20,6 @@ import userRoutes from "./routes/user.js";
 import adminRoutes from "./routes/admin.js";
 import paperRoutes from "./routes/paper.js";
 import coinRoutes from "./routes/coin.js";
-import aiRoutes from "./routes/ai.js";
 const app = express();
 
 /* ================= ENV VALIDATION ================= */
@@ -127,20 +126,8 @@ const sensitiveActionLimiter = rateLimit({
 
 app.use("/api/v1", limiter);
 app.use("/api/v1/auth", authLimiter);
-const aiLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    error: "Too many AI Assistant requests. Please slow down and try again.",
-  },
-});
-
 app.use("/api/v1/coins/purchase", sensitiveActionLimiter);
 app.use("/api/v1/papers/upload", sensitiveActionLimiter);
-app.use("/api/v1/ai", aiLimiter);
 
 
 /* ================= LOGGER ================= */
@@ -167,7 +154,6 @@ app.use(`${API}/users`, userRoutes);
 app.use(`${API}/papers`, paperRoutes);
 app.use(`${API}/admin`, adminRoutes);
 app.use(`${API}/coins`, coinRoutes);
-app.use(`${API}/ai`, aiRoutes);
 
 /* ================= HEALTH CHECK ================= */
 

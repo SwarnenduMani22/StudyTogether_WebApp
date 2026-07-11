@@ -138,6 +138,26 @@ const paperSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+
+    /* ================= AI METADATA ================= */
+    aiStatus: {
+      type: String,
+      enum: ["pending", "processing", "completed", "failed"],
+      default: "pending",
+      index: true,
+    },
+    chunkCount: {
+      type: Number,
+      default: 0,
+    },
+    indexedAt: {
+      type: Date,
+      default: null,
+    },
+    embeddingVersion: {
+      type: String,
+      default: null,
+    },
   },
 
   {
@@ -232,6 +252,10 @@ paperSchema.methods.toSafeObject = function () {
     averageRating: this.averageRating,
     popularityScore: this.popularityScore,
     status: this.status,
+    aiStatus: this.aiStatus,
+    chunkCount: this.chunkCount,
+    indexedAt: this.indexedAt,
+    embeddingVersion: this.embeddingVersion,
     createdAt: this.createdAt,
   };
 };

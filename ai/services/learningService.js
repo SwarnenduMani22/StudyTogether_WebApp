@@ -1,6 +1,6 @@
 import { searchSimilarity } from "./vectorSearch.js";
 import { generateLLMResponse } from "./index.js";
-import Paper from "../../models/Paper.js";
+import Paper from "../models/Paper.js";
 import { getUserPreferences } from "./memoryService.js";
 
 // 1. Study Notes Generator

@@ -1,5 +1,5 @@
-import Paper from "../../models/Paper.js";
-import PlatformKnowledge from "../../models/PlatformKnowledge.js";
+import Paper from "../models/Paper.js";
+import PlatformKnowledge from "../models/PlatformKnowledge.js";
 import { searchSimilarity, generateEmbedding } from "./vectorSearch.js";
 import { getPlatformResponse } from "./promptTemplates.js";
 import { getCurrentModel, fetchWithRetry } from "./modelManager.js";

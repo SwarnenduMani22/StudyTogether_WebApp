@@ -174,7 +174,6 @@ router.post("/login", async (req, res) => {
       success: true,
       message: "Login successful",
       accessToken,
-      refreshToken,
       user: user.toSafeObject(),
     });
   } catch (error) {

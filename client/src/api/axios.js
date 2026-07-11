@@ -52,13 +52,9 @@ api.interceptors.response.use(
       error.config._retry = true;
 
       try {
-        const refreshToken = localStorage.getItem("refreshToken");
-
-        if (!refreshToken) throw new Error("No refresh token");
-
         const res = await axios.post(
           `${BASE_URL}/auth/refresh`,
-          { refreshToken },
+          {},
           { withCredentials: true }
         );
 
@@ -76,7 +72,6 @@ api.interceptors.response.use(
 
         localStorage.removeItem("user");
         localStorage.removeItem("accessToken");
-        localStorage.removeItem("refreshToken");
 
         window.location.replace("/login");
         return Promise.reject(err);

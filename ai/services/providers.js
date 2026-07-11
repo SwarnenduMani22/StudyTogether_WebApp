@@ -1,7 +1,7 @@
 import { queryOllama } from "./ollamaService.js";
 import { getPlatformResponse } from "./promptTemplates.js";
 import { searchSimilarity } from "./vectorSearch.js";
-import Paper from "../../models/Paper.js";
+import Paper from "../models/Paper.js";
 import { buildPrompt } from "./promptManager.js";
 
 // AI Provider Interface

@@ -1,0 +1,110 @@
+import express from "express";
+import dotenv from "dotenv";
+import cors from "cors";
+import helmet from "helmet";
+import morgan from "morgan";
+import mongoose from "mongoose";
+import mongoSanitize from "express-mongo-sanitize";
+import rateLimit from "express-rate-limit";
+
+import aiRoutes from "./routes/index.js";
+import { checkOllamaHealth } from "./services/modelManager.js";
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.AI_PORT || 5001;
+
+// Global Middleware
+app.use(helmet());
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+    credentials: true,
+  }),
+);
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+//app.use(mongoSanitize());
+
+if (process.env.NODE_ENV === "development") {
+  app.use(morgan("dev"));
+}
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use("/api", limiter);
+
+// AI internal endpoints
+app.post("/api/v1/internal/ai/process", async (req, res) => {
+  try {
+    const { paperId } = req.body;
+    const Paper = (await import("./models/Paper.js")).default;
+    const paper = await Paper.findById(paperId);
+    if (!paper) return res.status(404).json({ error: "Paper not found" });
+
+    const { processPaper } = await import("./services/ingestor.js");
+    await processPaper(paper);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/v1/internal/ai/reprocess", async (req, res) => {
+  try {
+    const { paperId } = req.body;
+    const Paper = (await import("./models/Paper.js")).default;
+    const paper = await Paper.findById(paperId);
+    if (!paper) return res.status(404).json({ error: "Paper not found" });
+
+    const { reprocessPaper } = await import("./services/ingestor.js");
+    await reprocessPaper(paper);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/v1/internal/ai/knowledge/:paperId", async (req, res) => {
+  try {
+    const { paperId } = req.params;
+    const { deletePaperKnowledge } = await import("./services/ingestor.js");
+    await deletePaperKnowledge(paperId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// AI external routes
+app.use("/api/v1/ai", aiRoutes);
+
+// Health check
+app.get("/health", (req, res) =>
+  res.status(200).json({ status: "ok", service: "ai-module" }),
+);
+
+// MongoDB connection & Server Start
+mongoose
+  .connect(process.env.MONGODB_URI)
+  .then(async () => {
+    console.log("AI Module connected to MongoDB");
+
+    // Check local Ollama health
+    const ollamaStatus = await checkOllamaHealth();
+    console.log("Ollama Status:", ollamaStatus ? "Healthy" : "Unreachable");
+
+    app.listen(PORT, () => {
+      console.log(`AI Module running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("Failed to connect to MongoDB:", err);
+    process.exit(1);
+  });

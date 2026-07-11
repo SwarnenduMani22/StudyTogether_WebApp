@@ -2,10 +2,10 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import AIChatChunk from "./models/AIChatChunk.js";
 import Paper from "./models/Paper.js";
-import { processPaper } from "./services/ai/ingestor.js";
-import { searchSimilarity } from "./services/ai/vectorSearch.js";
-import { queryStudyAssistant } from "./services/ai/index.js";
-import { generateStudyNotes, generateQuiz, generateFlashcards, generateExamPlan } from "./services/ai/learningService.js";
+import { processPaper } from "./services/ingestor.js";
+import { searchSimilarity } from "./services/vectorSearch.js";
+import { queryStudyAssistant } from "./services/index.js";
+import { generateStudyNotes, generateQuiz, generateFlashcards, generateExamPlan } from "./services/learningService.js";
 
 dotenv.config();
 

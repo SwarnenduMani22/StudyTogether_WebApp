@@ -22,6 +22,11 @@ export default defineConfig({
     host: true,
 
     proxy: {
+      "/api/v1/ai": {
+        target: "http://localhost:5001",
+        changeOrigin: true,
+        secure: false,
+      },
       "/api": {
         target: "http://localhost:5000",
         changeOrigin: true,

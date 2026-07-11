@@ -28,6 +28,7 @@ const UploadPaper = lazy(() => import("./pages/UploadPaper"));
 const Leaderboard = lazy(() => import("./pages/Leaderboard"));
 const Wallet = lazy(() => import("./pages/Wallet"));
 const PublicProfile = lazy(() => import("./pages/PublicProfile"));
+const AIAssistant = lazy(() => import("./pages/AIAssistant"));
 /* ================= COMPONENTS ================= */
 
 import ErrorBoundary from "./components/common/ErrorBoundary";
@@ -206,7 +207,14 @@ export default function App() {
                     </ProtectedRoute>
                   }
                 />
-
+                <Route
+                  path="/assistant"
+                  element={
+                    <ProtectedRoute>
+                      <AIAssistant />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Suspense>

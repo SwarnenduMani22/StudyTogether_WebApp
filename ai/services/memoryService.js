@@ -1,5 +1,5 @@
-import AIChatSession from "../../models/AIChatSession.js";
-import User from "../../models/User.js";
+import AIChatSession from "../models/AIChatSession.js";
+import User from "../models/User.js";
 
 // Retrieve the last N messages as active session memory
 export const getConversationHistory = async (conversationId, limit = 6) => {

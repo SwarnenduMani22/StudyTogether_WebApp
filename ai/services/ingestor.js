@@ -1,5 +1,6 @@
 import { createRequire } from "module";
-import AIChatChunk from "../../models/AIChatChunk.js";
+import AIChatChunk from "../models/AIChatChunk.js";
+import Paper from "../models/Paper.js";
 import { generateEmbedding } from "./vectorSearch.js";
 
 // ─── Configuration ────────────────────────────────────────────────────────────
@@ -240,6 +241,9 @@ export const processPaper = async (paper) => {
   console.log(`[AI Ingestor] Processing paper: "${paper.title}" (ID: ${paper._id})`);
 
   try {
+    // Set status to processing
+    await Paper.findByIdAndUpdate(paper._id, { aiStatus: "processing" });
+
     let pages = []; // Array of { page: number, text: string }
 
     // ── Step 1 & 2: Download and parse PDF ────────────────────────────────
@@ -341,8 +345,18 @@ export const processPaper = async (paper) => {
       console.warn(`[AI Ingestor] No chunks generated for "${paper.title}".`);
     }
 
+    // Set status to completed
+    await Paper.findByIdAndUpdate(paper._id, {
+      aiStatus: "completed",
+      chunkCount: chunksToSave.length,
+      indexedAt: new Date(),
+      embeddingVersion: "v1",
+    });
+
     return { success: true, chunkCount: chunksToSave.length };
   } catch (error) {
+    // Set status to failed
+    await Paper.findByIdAndUpdate(paper._id, { aiStatus: "failed" }).catch(e => console.error("Failed to update status to failed:", e));
     console.error(`[AI Ingestor] Failed to ingest paper ${paper._id}:`, error);
     throw error;
   }

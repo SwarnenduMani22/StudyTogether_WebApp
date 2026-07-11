@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: studytogether-api
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - MONGODB_URI=mongodb://mongodb:27107/studytogether
+      - JWT_SECRET=production_jwt_sec_1234
+      - JWT_REFRESH_SECRET=production_jwt_refresh_sec_5678
+      - OLLAMA_URL=http://ollama:11434
+      - AI_PROVIDER=ollama
+      - OLLAMA_MODEL=mistral
+    depends_on:
+      - mongodb
+    restart: always
+
+  mongodb:
+    image: mongo:6.0
+    container_name: studytogether-db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    restart: always
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: studytogether-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: always
+
+volumes:
+  mongo-data:
+  ollama-data:

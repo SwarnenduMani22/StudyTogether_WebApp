@@ -1,5 +1,5 @@
-import AIChatChunk from "../../models/AIChatChunk.js";
-import Paper from "../../models/Paper.js";
+import AIChatChunk from "../models/AIChatChunk.js";
+import Paper from "../models/Paper.js";
 import { fetchWithRetry } from "./modelManager.js";
 
 // Helper: Cosine Similarity
