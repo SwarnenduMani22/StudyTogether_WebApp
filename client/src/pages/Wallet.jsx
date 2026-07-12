@@ -1,17 +1,22 @@
 import { useEffect, useState } from "react";
-import { getCoinOverview, purchaseCoins } from "../api/coinApi";
+import {
+  getCoinOverview,
+  createOrder,
+  verifyPayment,
+  getPaymentHistory,
+} from "../api/coinApi";
 import useAuth from "../hooks/useAuth";
 import toast from "react-hot-toast";
 import coinPackages from "../data/coinPackages";
 import PurchaseModal from "../components/wallet/PurchaseModel";
-
+import PaymentHistory from "../components/wallet/PaymentHistory";
 const Wallet = () => {
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [filter, setFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
-
+  const [payments, setPayments] = useState([]);
   const TRANSACTIONS_PER_PAGE = 10;
   const { user, updateUser } = useAuth();
   const handleBuy = (pkg) => {
@@ -22,7 +27,6 @@ const Wallet = () => {
   const handleCloseModal = () => {
     setSelectedPackage(null);
   };
-
   const handleConfirmPurchase = async (pkg) => {
     try {
       const packageMap = {
@@ -33,20 +37,75 @@ const Wallet = () => {
 
       const packageId = packageMap[pkg.id];
 
-      const response = await purchaseCoins(packageId);
+      const { order, key } = await createOrder(packageId);
 
-      toast.success(`${response.coinsAdded} coins added successfully`);
+      const options = {
+        key,
+        amount: order.amount,
+        currency: order.currency,
+        name: "StudyTogether",
+        description: `${pkg.name} Coin Package`,
+        order_id: order.id,
 
-      setSelectedPackage(null);
+        handler: async function (response) {
+          try {
+            await verifyPayment({
+              packageId,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            });
 
-      const updatedOverview = await getCoinOverview(currentPage, filter, TRANSACTIONS_PER_PAGE);
+            // Webhook coins add করবে, তাই ২-৩ সেকেন্ড অপেক্ষা
+            setTimeout(async () => {
+              const updatedOverview = await getCoinOverview(
+                currentPage,
+                filter,
+                TRANSACTIONS_PER_PAGE,
+              );
 
-      setOverview(updatedOverview);
+              setOverview(updatedOverview);
+              await loadPayments();
+              updateUser({
+                ...user,
+                coins: updatedOverview.currentBalance,
+              });
 
-      updateUser({
-        ...user,
-        coins: updatedOverview.currentBalance,
+              toast.success("Payment Successful 🎉");
+            }, 2500);
+
+            setSelectedPackage(null);
+          } catch (error) {
+            console.error(error);
+
+            toast.error(
+              error?.response?.data?.error || "Payment verification failed",
+            );
+          }
+        },
+
+        prefill: {
+          name: user?.name,
+          email: user?.email,
+        },
+
+        theme: {
+          color: "#6366F1",
+        },
+        modal: {
+          ondismiss: function () {
+            toast.error("Payment Cancelled");
+          },
+        },
+      };
+
+      const razorpay = new window.Razorpay(options);
+      razorpay.on("payment.failed", function (response) {
+        console.error(response.error);
+
+        toast.error("Payment Failed");
       });
+      razorpay.open();
     } catch (error) {
       console.error(error);
 
@@ -63,8 +122,18 @@ const Wallet = () => {
       setLoading(false);
     }
   };
+  const loadPayments = async () => {
+    try {
+      const data = await getPaymentHistory();
+
+      setPayments(data.payments || []);
+    } catch (error) {
+      console.error("Payment history load failed:", error);
+    }
+  };
   useEffect(() => {
     loadWallet(currentPage, filter);
+    loadPayments();
   }, [currentPage, filter]);
 
   if (loading) {
@@ -135,6 +204,9 @@ const Wallet = () => {
           ))}
         </div>
       </div>
+      {/* Payment History */}
+
+      <PaymentHistory payments={payments} />
       {/* Transaction History */}
 
       <div className="mt-8">
@@ -199,12 +271,24 @@ const Wallet = () => {
 
                   <div
                     className={`font-bold text-lg ${
-                      ["earned", "bonus", "purchase", "purchased", "refund"].includes(item.type)
+                      [
+                        "earned",
+                        "bonus",
+                        "purchase",
+                        "purchased",
+                        "refund",
+                      ].includes(item.type)
                         ? "text-green-500"
                         : "text-red-500"
                     }`}
                   >
-                    {["earned", "bonus", "purchase", "purchased", "refund"].includes(item.type)
+                    {[
+                      "earned",
+                      "bonus",
+                      "purchase",
+                      "purchased",
+                      "refund",
+                    ].includes(item.type)
                       ? "+"
                       : "-"}
                     {item.amount} 🪙

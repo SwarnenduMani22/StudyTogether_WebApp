@@ -80,3 +80,31 @@ export const approvePaper = async (id) => {
 
   return res.data;
 };
+
+export const getPaymentAnalytics = async () => {
+  const response = await api.get("/payment/admin/analytics");
+
+  return response.data;
+};
+export const getPackageSales = async () => {
+  const response = await api.get("/payment/admin/package-sales");
+
+  return response.data;
+};
+export const getPaymentList = async ({
+  page = 1,
+  limit = 10,
+  search = "",
+  status = "all",
+} = {}) => {
+  const response = await api.get("/payment/admin/list", {
+    params: {
+      page,
+      limit,
+      search,
+      status,
+    },
+  });
+
+  return response.data;
+};

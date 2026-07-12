@@ -20,6 +20,7 @@ import userRoutes from "./routes/user.js";
 import adminRoutes from "./routes/admin.js";
 import paperRoutes from "./routes/paper.js";
 import coinRoutes from "./routes/coin.js";
+import paymentRoutes from "./routes/payment.routes.js";
 const app = express();
 
 /* ================= ENV VALIDATION ================= */
@@ -38,9 +39,6 @@ if (!process.env.JWT_REFRESH_SECRET) {
   console.error("❌ JWT_REFRESH_SECRET missing in .env");
   process.exit(1);
 }
-
-
-
 
 /* ================= SETTINGS ================= */
 
@@ -129,7 +127,6 @@ app.use("/api/v1/auth", authLimiter);
 app.use("/api/v1/coins/purchase", sensitiveActionLimiter);
 app.use("/api/v1/papers/upload", sensitiveActionLimiter);
 
-
 /* ================= LOGGER ================= */
 
 const morganFormat = process.env.NODE_ENV === "production" ? "combined" : "dev";
@@ -146,7 +143,9 @@ app.use("/uploads", express.static(uploadsPath));
 /* ================= API PREFIX ================= */
 
 const API = "/api/v1";
+/* ================= WEBHOOK ================= */
 
+app.use("/api/v1/payment/webhook", express.raw({ type: "application/json" }));
 /* ================= ROUTES ================= */
 
 app.use(`${API}/auth`, authRoutes);
@@ -154,11 +153,12 @@ app.use(`${API}/users`, userRoutes);
 app.use(`${API}/papers`, paperRoutes);
 app.use(`${API}/admin`, adminRoutes);
 app.use(`${API}/coins`, coinRoutes);
-
+app.use(`${API}/payment`, paymentRoutes);
 /* ================= HEALTH CHECK ================= */
 
 app.get(`${API}/health`, (req, res) => {
-  const dbStatus = mongoose.connection.readyState === 1 ? "connected" : "disconnected";
+  const dbStatus =
+    mongoose.connection.readyState === 1 ? "connected" : "disconnected";
   const healthStatus = dbStatus === "connected" ? "healthy" : "degraded";
 
   res.status(healthStatus === "healthy" ? 200 : 503).json({
@@ -169,7 +169,7 @@ app.get(`${API}/health`, (req, res) => {
     services: {
       database: dbStatus,
     },
-    timestamp: Date.now()
+    timestamp: Date.now(),
   });
 });
 
@@ -211,9 +211,14 @@ const connectDB = async (retries = 5, delayMs = 5000) => {
       console.log("✅ MongoDB Connected successfully");
       return;
     } catch (error) {
-      console.error(`❌ MongoDB Connection Attempt ${attempt}/${retries} Failed:`, error.message);
+      console.error(
+        `❌ MongoDB Connection Attempt ${attempt}/${retries} Failed:`,
+        error.message,
+      );
       if (attempt === retries) {
-        console.error("❌ Maximum MongoDB connection retry attempts reached. Exiting process.");
+        console.error(
+          "❌ Maximum MongoDB connection retry attempts reached. Exiting process.",
+        );
         process.exit(1);
       }
       console.log(`🔄 Retrying database connection in ${delayMs / 1000}s...`);

@@ -4,6 +4,11 @@ import Skeleton from "../components/common/Skeleton";
 import AdminCharts from "../components/admin/AdminCharts";
 import useAuth from "../hooks/useAuth";
 import toast from "react-hot-toast";
+import {
+  getPaymentAnalytics,
+  getPackageSales,
+  getPaymentList,
+} from "../api/admin";
 
 const Admin = () => {
   const { user: loggedInUser } = useAuth();
@@ -33,6 +38,17 @@ const Admin = () => {
     totalCoinsSpent: 0,
     totalTransactions: 0,
   });
+  const [paymentAnalytics, setPaymentAnalytics] = useState({
+    revenue: 0,
+    totalPayments: 0,
+    totalCoins: 0,
+  });
+  const [packageSales, setPackageSales] = useState([]);
+  const [paymentList, setPaymentList] = useState([]);
+  const [paymentSearch, setPaymentSearch] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState("all");
+  const [paymentPage, setPaymentPage] = useState(1);
+  const [paymentTotalPages, setPaymentTotalPages] = useState(1);
   /* ================= FETCH USERS ================= */
 
   const fetchUsers = useCallback(async () => {
@@ -106,6 +122,40 @@ const Admin = () => {
       console.error(error);
     }
   }, []);
+  const fetchPaymentAnalytics = useCallback(async () => {
+    try {
+      const res = await getPaymentAnalytics();
+
+      setPaymentAnalytics(res.analytics);
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
+  const fetchPackageSales = useCallback(async () => {
+    try {
+      const data = await getPackageSales();
+
+      setPackageSales(data.sales);
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
+
+  const fetchPaymentList = useCallback(async () => {
+    try {
+      const data = await getPaymentList({
+        page: paymentPage,
+        search: paymentSearch,
+        status: paymentStatus,
+      });
+
+      setPaymentList(data.payments || []);
+      setPaymentTotalPages(data.totalPages || 1);
+    } catch (error) {
+      console.error(error);
+    }
+  }, [paymentPage, paymentSearch, paymentStatus]);
+
   /* ================= LOAD DASHBOARD ================= */
 
   const loadDashboard = useCallback(async () => {
@@ -119,6 +169,9 @@ const Admin = () => {
         fetchTopContributors(),
         fetchTopCoinHolders(),
         fetchCoinAnalytics(),
+        fetchPaymentAnalytics(),
+        fetchPackageSales(),
+        fetchPaymentList(),
       ]);
     } catch (err) {
       console.error("Dashboard load error:", err);
@@ -132,12 +185,17 @@ const Admin = () => {
     fetchTopContributors,
     fetchTopCoinHolders,
     fetchCoinAnalytics,
+    fetchPaymentAnalytics,
+    fetchPackageSales,
+    fetchPaymentList,
   ]);
 
   useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
-
+  useEffect(() => {
+    fetchPaymentList();
+  }, [fetchPaymentList]);
   /* ================= DELETE USER ================= */
 
   const handleDelete = async (id) => {
@@ -214,6 +272,31 @@ const Admin = () => {
         )}
 
         <AdminCharts stats={stats} />
+        <div className="grid md:grid-cols-3 gap-6 mt-6">
+          <div className="card text-center">
+            <p className="text-gray-500">💰 Total Revenue</p>
+
+            <h3 className="text-2xl font-bold text-green-600">
+              ₹{paymentAnalytics.revenue}
+            </h3>
+          </div>
+
+          <div className="card text-center">
+            <p className="text-gray-500">💳 Successful Payments</p>
+
+            <h3 className="text-2xl font-bold text-blue-600">
+              {paymentAnalytics.totalPayments}
+            </h3>
+          </div>
+
+          <div className="card text-center">
+            <p className="text-gray-500">🪙 Coins Sold</p>
+
+            <h3 className="text-2xl font-bold text-yellow-500">
+              {paymentAnalytics.totalCoins}
+            </h3>
+          </div>
+        </div>
         <div className="grid md:grid-cols-4 gap-6">
           <div className="card text-center">
             <p className="text-gray-500">Coins In System</p>
@@ -307,6 +390,132 @@ const Admin = () => {
             </div>
           )}
         </div>
+
+        <div className="card">
+          <h3 className="text-xl font-semibold mb-4">Package Sales 📦</h3>
+
+          {packageSales.length === 0 ? (
+            <p className="text-center text-gray-500 py-4">
+              No package sales available
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <th className="p-3 text-left">Package</th>
+                    <th className="p-3 text-left">Sales</th>
+                    <th className="p-3 text-left">Revenue</th>
+                    <th className="p-3 text-left">Coins Sold</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {packageSales.map((item) => (
+                    <tr key={item._id} className="border-b">
+                      <td className="p-3">{item._id}</td>
+                      <td className="p-3">{item.totalSales}</td>
+                      <td className="p-3 font-bold text-green-600">
+                        ₹{item.revenue}
+                      </td>
+                      <td className="p-3">{item.coins}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="card">
+          <input
+            className="input mb-4"
+            placeholder="Search Name / Email / Payment ID / Order ID"
+            value={paymentSearch}
+            onChange={(e) => {
+              setPaymentSearch(e.target.value);
+              setPaymentPage(1);
+            }}
+          />{" "}
+          <select
+            className="input mb-4 ml-3"
+            value={paymentStatus}
+            onChange={(e) => {
+              setPaymentStatus(e.target.value);
+              setPaymentPage(1);
+            }}
+          >
+            {" "}
+            <option value="all">All</option>
+            <option value="created">Created</option>
+            <option value="captured">Captured</option>
+            <option value="failed">Failed</option>
+            <option value="refunded">Refunded</option>
+          </select>
+          <h3 className="text-xl font-semibold mb-4">Payment List 💳</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Package</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {paymentList.map((payment) => (
+                  <tr key={payment._id}>
+                    <td>{payment.user?.name}</td>
+                    <td>{payment.packageName}</td>
+                    <td>₹{payment.amount}</td>
+                    <td>
+                      <span
+                        className={`px-2 py-1 rounded text-white
+      ${
+        payment.status === "captured"
+          ? "bg-green-500"
+          : payment.status === "failed"
+            ? "bg-red-500"
+            : payment.status === "created"
+              ? "bg-yellow-500"
+              : "bg-gray-500"
+      }`}
+                      >
+                        {payment.status}
+                      </span>
+                    </td>
+                    <td>{new Date(payment.createdAt).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex justify-center items-center gap-4 mt-6">
+            <button
+              disabled={paymentPage === 1}
+              onClick={() => setPaymentPage((p) => p - 1)}
+              className="btn"
+            >
+              Previous
+            </button>
+
+            <span>
+              Page {paymentPage} of {paymentTotalPages}
+            </span>
+
+            <button
+              disabled={paymentPage === paymentTotalPages}
+              onClick={() => setPaymentPage((p) => p + 1)}
+              className="btn"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+
         {/* ================= USER MANAGEMENT ================= */}
 
         <div className="card">
