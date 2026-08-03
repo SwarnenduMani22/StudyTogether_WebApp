@@ -1,5 +1,7 @@
 # 📚 StudyTogether
 
+> **A Gamified Academic Resource Platform Built with the MERN Stack**
+
 [![MERN Stack](https://img.shields.io/badge/Stack-MERN-blue.svg)](https://mongodb.com)
 [![React 19](https://img.shields.io/badge/React-19.0-blue.svg?logo=react)](https://react.dev)
 [![Node.js](https://img.shields.io/badge/Node.js-20.x-green.svg?logo=node.js)](https://nodejs.org)
@@ -7,7 +9,9 @@
 [![JWT Authentication](https://img.shields.io/badge/Auth-JWT_HttpOnly-red.svg)](https://jwt.io)
 [![License: ISC](https://img.shields.io/badge/License-ISC-yellow.svg)](https://opensource.org/licenses/ISC)
 
-StudyTogether is a modern, gamified, full-stack MERN academic platform designed for college students to upload, discover, preview, rate, bookmark, and download peer-reviewed study papers. The platform operates on a gamified coin economy featuring badges, ranks, leaderboard positioning, and automated contributions tracking.
+**StudyTogether** is a modern, gamified, full-stack **MERN** academic platform designed for **college students** to upload, discover, preview, rate, bookmark, and download peer-reviewed study papers.
+
+The platform operates on a **gamified coin economy** featuring badges, ranks, leaderboard positioning, and automated contributions tracking.
 
 ---
 
