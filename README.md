@@ -103,6 +103,7 @@ graph TD
     Server <-->|Upload / Delete Files| Cloudinary[Cloudinary PDF Storage]
     Client <-->|Token Storage| LocalStorage[(Local Storage)]
     Server <-->|Payment Verification| Razorpay[Razorpay Payment API]
+    Server <-->|Prompts & Embeddings| Ollama[Local LLM - Ollama]
 ```
 
 ---
@@ -111,6 +112,8 @@ graph TD
 
 ```bash
 FINAL_YEAR/
+├── ai/                          # AI Copilot Node.js service & utilities
+├── ai_python/                   # Python scripts for RAG and PDF processing
 ├── client/                      # React Frontend
 │   ├── src/
 │   │   ├── api/                 # Axios instance and endpoints functions
