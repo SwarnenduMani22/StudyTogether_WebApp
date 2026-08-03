@@ -82,3 +82,35 @@ coverage
 
 # Optional package manager files
 .pnpm-store
+
+# Python virtual environment
+.venv/
+**/.venv/
+
+# Python cache
+**/__pycache__/
+*.pyc
+
+# AI generated data
+ai_python/data/vectorstore/
+ai_python/data/cache/
+ai_python/data/uploads/
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Python logs
+*.log
+
+# Docker
+docker-compose.override.yml
+
+# Git
+.git/
+
+# Temporary files
+*.bak
+*.old
+*.orig
