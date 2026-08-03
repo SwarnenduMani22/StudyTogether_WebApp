@@ -9,9 +9,9 @@
 [![JWT Authentication](https://img.shields.io/badge/Auth-JWT_HttpOnly-red.svg)](https://jwt.io)
 [![License: ISC](https://img.shields.io/badge/License-ISC-yellow.svg)](https://opensource.org/licenses/ISC)
 
-**StudyTogether** is a modern, gamified, full-stack **MERN** academic platform designed for **college students** to upload, discover, preview, rate, bookmark, and download peer-reviewed study papers.
+**StudyTogether** is a full-stack web application designed for **college students** to seamlessly upload, discover, and interact with peer-reviewed study materials. 
 
-The platform operates on a **gamified coin economy** featuring badges, ranks, leaderboard positioning, and automated contributions tracking.
+The platform incentivizes academic contribution through a custom **virtual economy**. Users earn "Study Coins" by uploading high-quality, admin-approved resources, which they can then spend to access other materials. Built on a robust **MERN (MongoDB, Express.js, React.js, Node.js)** architecture, it features secure JWT authentication, transactional database integrity, and an integrated **AI Study Copilot** utilizing Retrieval-Augmented Generation (RAG) for automated document analysis.
 
 ---
 
@@ -47,16 +47,16 @@ StudyTogether incentivizes academic resource sharing. Students who upload high-q
 
 ## ✨ Key Features
 
-*   **AI Study Copilot**: Fully-integrated **RAG** assistant featuring real PDF text extraction, **OCR** fallback for scanned papers, hybrid keyword (**BM25**) and semantic retrieval, secure prompt validation, conversation history pruner, and automated study notes, mcq quizzes, flashcards, and strategic study plans.
-*   **Gamified Coin Economy**: **Atomic** coin balance manipulation preventing double-spending, negative balances, and concurrency conflicts.
-*   **Secure Authentication**: Fully aligned **JWT** lifecycle featuring short-lived Access Tokens (15 min) and Secure **SameSite HttpOnly** Cookie Refresh Tokens (7 days) with instant device revocation.
-*   **Approval & Moderation**: Single and bulk moderation queues allowing admins to inspect submitted PDFs on Cloudinary, approve them with uploader coins rewards (+30 coins), or reject them with automatic Cloudinary storage unlinking.
+*   **Secure Authentication**: Fully aligned JWT lifecycle featuring short-lived Access Tokens (15 min) and Secure SameSite HttpOnly Cookie Refresh Tokens (7 days) with instant device revocation.
 *   **Draft Paper Support**: Save, edit, replace PDFs, delete, and publish papers as drafts. Drafts do not consume uploader limit slots.
+*   **Approval & Moderation**: Single and bulk moderation queues allowing admins to inspect submitted PDFs on Cloudinary, approve them with uploader coins rewards (+30 coins), or reject them with automatic Cloudinary storage unlinking.
+*   **Gamified Coin Economy**: Atomic coin balance manipulation preventing double-spending, negative balances, and concurrency conflicts.
 *   **Leaderboard & Streaks**: Dynamic calculation of user ranks (Beginner 🥉, Explorer 🥈, Scholar 📘, Expert 🏆, Legend 👑) based on coins and approved uploads. Tracks daily streaks automatically to award 3-day and 7-day streak badges.
 *   **Public User Profiles**: Privacy-respecting contributor profiles displaying public badges, contributions metrics, and a monthly contribution activity chart.
 *   **Community Engagement**: Star ratings (one vote per user), multi-user comment feeds, and personal study material bookmarks.
 *   **Admin Dashboard**: Interactive metrics detailing total users, admins, views, downloads, comments, and transaction-safe aggregate system coin analytics.
-*   **Razorpay Gateway Integration**: Cryptographically verified checkout **webhooks** to securely buy Study Coins packages.
+*   **Razorpay Gateway Integration**: Cryptographically verified checkout webhooks to securely buy Study Coins packages.
+*   **AI Study Copilot**: Fully-integrated RAG assistant featuring real PDF text extraction, OCR fallback for scanned papers, hybrid keyword (BM25) and semantic retrieval, secure prompt validation, conversation history pruner, and automated study notes, mcq quizzes, flashcards, and strategic study plans.
 
 ---
 
@@ -66,12 +66,9 @@ StudyTogether incentivizes academic resource sharing. Students who upload high-q
 *   **React 19**: Core framework.
 *   **Vite**: Fast, module-based bundler.
 *   **Tailwind CSS**: Utility-first layouts.
-*   **Framer Motion**: UI animations.
-*   **React Router DOM v7**: Client-side routing.
+*   **React Router DOM v6**: Client-side routing.
 *   **TanStack React Query**: Server state caching, background refetches, and infinite scroll pipelines.
 *   **React Infinite Scroll Component**: Handles paginated items lists.
-*   **Recharts**: Dashboard analytics rendering.
-*   **React PDF**: Native browser PDF rendering.
 *   **Axios**: Custom instance configured with `withCredentials: true` and interceptors for silent token refreshes.
 
 ### Backend
@@ -80,17 +77,8 @@ StudyTogether incentivizes academic resource sharing. Students who upload high-q
 *   **MongoDB**: Document-oriented database.
 *   **Mongoose**: Schemas and queries modeling.
 *   **Multer / Cloudinary**: Multipart file uploads processing and secure cloud PDF storage.
-*   **Razorpay**: Secure payments API integration.
-
-### AI & Document Processing
 *   **Ollama**: Local host LLM model runner (mistral/nomic-embed-text).
 *   **pdf-parse / tesseract.js / pdf-img-convert**: High-performance extraction, scanned document OCR pipeline, and page-rendering helper.
-
-### Security
-*   **JWT**: Secure authentication tokens.
-*   **Helmet**: HTTP security headers.
-*   **Express Rate Limit**: Request rate limiting.
-*   **Express Mongo Sanitize**: NoSQL injection prevention.
 
 ---
 
@@ -103,7 +91,6 @@ graph TD
     Server <-->|Upload / Delete Files| Cloudinary[Cloudinary PDF Storage]
     Client <-->|Token Storage| LocalStorage[(Local Storage)]
     Server <-->|Payment Verification| Razorpay[Razorpay Payment API]
-    Server <-->|Prompts & Embeddings| Ollama[Local LLM - Ollama]
 ```
 
 ---
@@ -112,8 +99,6 @@ graph TD
 
 ```bash
 FINAL_YEAR/
-├── ai/                          # AI Copilot Node.js service & utilities
-├── ai_python/                   # Python scripts for RAG and PDF processing
 ├── client/                      # React Frontend
 │   ├── src/
 │   │   ├── api/                 # Axios instance and endpoints functions
@@ -141,17 +126,35 @@ FINAL_YEAR/
 Create a `.env` file in the `server` directory:
 ```env
 PORT=5000
-NODE_ENV=development
 MONGODB_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/studytogether
-JWT_SECRET=your_jwt_access_token_secret_key_here
-JWT_REFRESH_SECRET=your_jwt_refresh_token_secret_key_here
+JWT_SECRET=your_super_secret_jwt_access_key
+JWT_REFRESH_SECRET=your_super_secret_jwt_refresh_key
 CLIENT_URL=http://localhost:5173
-CLOUD_NAME=your_cloudinary_cloud_name_here
-API_KEY=your_cloudinary_api_key_here
-API_SECRET=your_cloudinary_api_secret_here
-RAZORPAY_KEY_ID=your_razorpay_key_id_here
-RAZORPAY_KEY_SECRET=your_razorpay_key_secret_here
-RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_signature_secret_here
+CLOUD_NAME=your_cloudinary_cloud_name
+API_KEY=your_cloudinary_api_key
+API_SECRET=your_cloudinary_api_secret
+RAZORPAY_KEY_ID=your_razorpay_key_id
+RAZORPAY_KEY_SECRET=your_razorpay_key_secret
+RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_secret
+NODE_ENV=development
+
+# AI Copilot Configs (Local Ollama LLM Runner)
+AI_PROVIDER=ollama
+OLLAMA_URL=http://localhost:11434
+EMBEDDING_MODEL=nomic-embed-text
+LLM_PROVIDER=ollama
+
+# RAG Chunking Parameters
+PDF_CHUNK_SIZE_WORDS=120
+PDF_CHUNK_OVERLAP_WORDS=20
+
+# Hybrid Retrieval Score Weights
+SEMANTIC_WEIGHT=0.6
+BM25_WEIGHT=0.4
+
+# Session Memory Guard Limits
+MAX_SESSION_MESSAGES=50
+SESSION_TTL_SECONDS=2592000
 ```
 
 ### Frontend (`client/.env`)
@@ -168,16 +171,11 @@ VITE_API_URL=http://localhost:5000/api/v1
 *   Node.js installed (v18+ recommended)
 *   MongoDB Instance (Local or MongoDB Atlas)
 *   Cloudinary Account
-*   Ollama (Local LLM runner). Install the required models:
-    ```bash
-    ollama pull mistral
-    ollama pull nomic-embed-text
-    ```
 
 ### 1. Clone the Project
 ```bash
-git clone https://github.com/SwarnenduMani22/StudyTogether_WebApp.git
-cd StudyTogether_WebApp
+git clone https://github.com/SwarnenduMani22/FINAL_YEAR.git
+cd FINAL_YEAR
 ```
 
 ### 2. Configure Backend
@@ -185,6 +183,7 @@ cd StudyTogether_WebApp
 cd server
 npm install
 # Add your environment variables to .env
+npm run dev
 ```
 
 ### 3. Configure Frontend
@@ -192,25 +191,15 @@ npm install
 cd ../client
 npm install
 # Add your environment variables to .env
+npm run dev
 ```
 
 ---
 
 ## 💻 Running the Project
 
-Open two separate terminal windows:
-
 *   **Backend Server**: Starts on `http://localhost:5000` (API endpoint root is `/api/v1`).
-    ```bash
-    cd server
-    npm run dev
-    ```
-
 *   **Frontend Client**: Starts on `http://localhost:5173`.
-    ```bash
-    cd client
-    npm run dev
-    ```
 
 ---
 
@@ -406,21 +395,24 @@ Vite compiles assets into `client/dist/` for static hosting (Vercel, Netlify, et
 ---
 
 ## 🖼 Screenshots
+*(Visual mockup representations)*
 
-### 1. Dashboard
-![Dashboard](assets/screenshots/dashboard.png)
-
-### 2. Browse Papers
-![Browse Papers](assets/screenshots/browse-papers.png)
-
-### 3. Upload Paper
-![Upload Paper](assets/screenshots/upload-paper.png)
-
-### 4. Leaderboard
-![Leaderboard](assets/screenshots/leaderboard.png)
-
-### 5. Admin Analytics
-![Admin Analytics](assets/screenshots/admin-analytics.png)
+```
++--------------------------------------------------------------+
+|                         STUDYTOGETHER                        |
++--------------------------------------------------------------+
+| [Browse Papers] [Upload Paper] [Leaderboard] [Wallet] (Profile)|
+|                                                              |
+| Welcome, Swarnendu 👋                                        |
+|                                                              |
+|   +-------------------+  +-------------------+  +----------+ |
+|   | Approved Uploads  |  | Pending Uploads   |  | Coins    | |
+|   |       12          |  |        1          |  |  280 🪙  | |
+|   +-------------------+  +-------------------+  +----------+ |
+|                                                              |
+|   Study rank: Expert 🏆                                      |
++--------------------------------------------------------------+
+```
 
 ---
 
