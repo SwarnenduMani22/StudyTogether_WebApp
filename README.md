@@ -176,8 +176,8 @@ VITE_API_URL=http://localhost:5000/api/v1
 
 ### 1. Clone the Project
 ```bash
-git clone https://github.com/SwarnenduMani22/FINAL_YEAR.git
-cd FINAL_YEAR
+git clone https://github.com/SwarnenduMani22/StudyTogether_WebApp.git
+cd StudyTogether_WebApp
 ```
 
 ### 2. Configure Backend
