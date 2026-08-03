@@ -138,35 +138,17 @@ FINAL_YEAR/
 Create a `.env` file in the `server` directory:
 ```env
 PORT=5000
-MONGODB_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/studytogether
-JWT_SECRET=your_super_secret_jwt_access_key
-JWT_REFRESH_SECRET=your_super_secret_jwt_refresh_key
-CLIENT_URL=http://localhost:5173
-CLOUD_NAME=your_cloudinary_cloud_name
-API_KEY=your_cloudinary_api_key
-API_SECRET=your_cloudinary_api_secret
-RAZORPAY_KEY_ID=your_razorpay_key_id
-RAZORPAY_KEY_SECRET=your_razorpay_key_secret
-RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_secret
 NODE_ENV=development
-
-# AI Copilot Configs (Local Ollama LLM Runner)
-AI_PROVIDER=ollama
-OLLAMA_URL=http://localhost:11434
-EMBEDDING_MODEL=nomic-embed-text
-LLM_PROVIDER=ollama
-
-# RAG Chunking Parameters
-PDF_CHUNK_SIZE_WORDS=120
-PDF_CHUNK_OVERLAP_WORDS=20
-
-# Hybrid Retrieval Score Weights
-SEMANTIC_WEIGHT=0.6
-BM25_WEIGHT=0.4
-
-# Session Memory Guard Limits
-MAX_SESSION_MESSAGES=50
-SESSION_TTL_SECONDS=2592000
+MONGODB_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/studytogether
+JWT_SECRET=your_jwt_access_token_secret_key_here
+JWT_REFRESH_SECRET=your_jwt_refresh_token_secret_key_here
+CLIENT_URL=http://localhost:5173
+CLOUD_NAME=your_cloudinary_cloud_name_here
+API_KEY=your_cloudinary_api_key_here
+API_SECRET=your_cloudinary_api_secret_here
+RAZORPAY_KEY_ID=your_razorpay_key_id_here
+RAZORPAY_KEY_SECRET=your_razorpay_key_secret_here
+RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_signature_secret_here
 ```
 
 ### Frontend (`client/.env`)
@@ -183,6 +165,11 @@ VITE_API_URL=http://localhost:5000/api/v1
 *   Node.js installed (v18+ recommended)
 *   MongoDB Instance (Local or MongoDB Atlas)
 *   Cloudinary Account
+*   Ollama (Local LLM runner). Install the required models:
+    ```bash
+    ollama pull mistral
+    ollama pull nomic-embed-text
+    ```
 
 ### 1. Clone the Project
 ```bash
@@ -195,7 +182,6 @@ cd FINAL_YEAR
 cd server
 npm install
 # Add your environment variables to .env
-npm run dev
 ```
 
 ### 3. Configure Frontend
@@ -203,15 +189,25 @@ npm run dev
 cd ../client
 npm install
 # Add your environment variables to .env
-npm run dev
 ```
 
 ---
 
 ## 💻 Running the Project
 
+Open two separate terminal windows:
+
 *   **Backend Server**: Starts on `http://localhost:5000` (API endpoint root is `/api/v1`).
+    ```bash
+    cd server
+    npm run dev
+    ```
+
 *   **Frontend Client**: Starts on `http://localhost:5173`.
+    ```bash
+    cd client
+    npm run dev
+    ```
 
 ---
 
