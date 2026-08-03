@@ -406,24 +406,21 @@ Vite compiles assets into `client/dist/` for static hosting (Vercel, Netlify, et
 ---
 
 ## 🖼 Screenshots
-*(Visual mockup representations)*
 
-```
-+--------------------------------------------------------------+
-|                         STUDYTOGETHER                        |
-+--------------------------------------------------------------+
-| [Browse Papers] [Upload Paper] [Leaderboard] [Wallet] (Profile)|
-|                                                              |
-| Welcome, Swarnendu 👋                                        |
-|                                                              |
-|   +-------------------+  +-------------------+  +----------+ |
-|   | Approved Uploads  |  | Pending Uploads   |  | Coins    | |
-|   |       12          |  |        1          |  |  280 🪙  | |
-|   +-------------------+  +-------------------+  +----------+ |
-|                                                              |
-|   Study rank: Expert 🏆                                      |
-+--------------------------------------------------------------+
-```
+### 1. Dashboard
+![Dashboard](assets/screenshots/dashboard.png)
+
+### 2. Browse Papers
+![Browse Papers](assets/screenshots/browse-papers.png)
+
+### 3. Upload Paper
+![Upload Paper](assets/screenshots/upload-paper.png)
+
+### 4. Leaderboard
+![Leaderboard](assets/screenshots/leaderboard.png)
+
+### 5. Admin Analytics
+![Admin Analytics](assets/screenshots/admin-analytics.png)
 
 ---
 
