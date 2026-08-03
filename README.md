@@ -66,9 +66,12 @@ StudyTogether incentivizes academic resource sharing. Students who upload high-q
 *   **React 19**: Core framework.
 *   **Vite**: Fast, module-based bundler.
 *   **Tailwind CSS**: Utility-first layouts.
-*   **React Router DOM v6**: Client-side routing.
+*   **Framer Motion**: UI animations.
+*   **React Router DOM v7**: Client-side routing.
 *   **TanStack React Query**: Server state caching, background refetches, and infinite scroll pipelines.
 *   **React Infinite Scroll Component**: Handles paginated items lists.
+*   **Recharts**: Dashboard analytics rendering.
+*   **React PDF**: Native browser PDF rendering.
 *   **Axios**: Custom instance configured with `withCredentials: true` and interceptors for silent token refreshes.
 
 ### Backend
@@ -77,8 +80,17 @@ StudyTogether incentivizes academic resource sharing. Students who upload high-q
 *   **MongoDB**: Document-oriented database.
 *   **Mongoose**: Schemas and queries modeling.
 *   **Multer / Cloudinary**: Multipart file uploads processing and secure cloud PDF storage.
+*   **Razorpay**: Secure payments API integration.
+
+### AI & Document Processing
 *   **Ollama**: Local host LLM model runner (mistral/nomic-embed-text).
 *   **pdf-parse / tesseract.js / pdf-img-convert**: High-performance extraction, scanned document OCR pipeline, and page-rendering helper.
+
+### Security
+*   **JWT**: Secure authentication tokens.
+*   **Helmet**: HTTP security headers.
+*   **Express Rate Limit**: Request rate limiting.
+*   **Express Mongo Sanitize**: NoSQL injection prevention.
 
 ---
 
