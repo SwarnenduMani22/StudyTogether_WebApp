@@ -47,16 +47,16 @@ StudyTogether incentivizes academic resource sharing. Students who upload high-q
 
 ## ✨ Key Features
 
-*   **Secure Authentication**: Fully aligned JWT lifecycle featuring short-lived Access Tokens (15 min) and Secure SameSite HttpOnly Cookie Refresh Tokens (7 days) with instant device revocation.
-*   **Draft Paper Support**: Save, edit, replace PDFs, delete, and publish papers as drafts. Drafts do not consume uploader limit slots.
+*   **AI Study Copilot**: Fully-integrated **RAG** assistant featuring real PDF text extraction, **OCR** fallback for scanned papers, hybrid keyword (**BM25**) and semantic retrieval, secure prompt validation, conversation history pruner, and automated study notes, mcq quizzes, flashcards, and strategic study plans.
+*   **Gamified Coin Economy**: **Atomic** coin balance manipulation preventing double-spending, negative balances, and concurrency conflicts.
+*   **Secure Authentication**: Fully aligned **JWT** lifecycle featuring short-lived Access Tokens (15 min) and Secure **SameSite HttpOnly** Cookie Refresh Tokens (7 days) with instant device revocation.
 *   **Approval & Moderation**: Single and bulk moderation queues allowing admins to inspect submitted PDFs on Cloudinary, approve them with uploader coins rewards (+30 coins), or reject them with automatic Cloudinary storage unlinking.
-*   **Gamified Coin Economy**: Atomic coin balance manipulation preventing double-spending, negative balances, and concurrency conflicts.
+*   **Draft Paper Support**: Save, edit, replace PDFs, delete, and publish papers as drafts. Drafts do not consume uploader limit slots.
 *   **Leaderboard & Streaks**: Dynamic calculation of user ranks (Beginner 🥉, Explorer 🥈, Scholar 📘, Expert 🏆, Legend 👑) based on coins and approved uploads. Tracks daily streaks automatically to award 3-day and 7-day streak badges.
 *   **Public User Profiles**: Privacy-respecting contributor profiles displaying public badges, contributions metrics, and a monthly contribution activity chart.
 *   **Community Engagement**: Star ratings (one vote per user), multi-user comment feeds, and personal study material bookmarks.
 *   **Admin Dashboard**: Interactive metrics detailing total users, admins, views, downloads, comments, and transaction-safe aggregate system coin analytics.
-*   **Razorpay Gateway Integration**: Cryptographically verified checkout webhooks to securely buy Study Coins packages.
-*   **AI Study Copilot**: Fully-integrated RAG assistant featuring real PDF text extraction, OCR fallback for scanned papers, hybrid keyword (BM25) and semantic retrieval, secure prompt validation, conversation history pruner, and automated study notes, mcq quizzes, flashcards, and strategic study plans.
+*   **Razorpay Gateway Integration**: Cryptographically verified checkout **webhooks** to securely buy Study Coins packages.
 
 ---
 
