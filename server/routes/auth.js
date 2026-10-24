@@ -135,6 +135,15 @@ router.post("/login", async (req, res) => {
       });
     }
 
+    /* ---------- ACCOUNT STATUS CHECK ---------- */
+
+    if (user.isActive === false || user.status === "disabled") {
+      return res.status(403).json({
+        success: false,
+        error: "Account has been disabled. Please contact support.",
+      });
+    }
+
     /* ---------- GENERATE TOKENS ---------- */
 
     const accessToken = jwt.sign(
@@ -224,12 +233,21 @@ router.post("/refresh", async (req, res) => {
 
     /* ---------- USER CHECK ---------- */
 
-    const user = await User.findById(decoded.id).select("_id role email +refreshToken");
+    const user = await User.findById(decoded.id).select(
+      "_id role email isActive status +refreshToken",
+    );
 
     if (!user || user.refreshToken !== refreshToken) {
       return res.status(401).json({
         success: false,
         error: "Unauthorized access or token revoked",
+      });
+    }
+
+    if (user.isActive === false || user.status === "disabled") {
+      return res.status(403).json({
+        success: false,
+        error: "Account has been disabled. Please contact support.",
       });
     }
 

@@ -9,7 +9,14 @@ const verifyAdmin = (req, res, next) => {
       });
     }
 
-    /* ================= ROLE CHECK ================= */
+    /* ================= STATUS & ROLE CHECK ================= */
+
+    if (req.user.isActive === false || req.user.status === "disabled") {
+      return res.status(403).json({
+        success: false,
+        error: "Account has been disabled. Please contact support.",
+      });
+    }
 
     const { role } = req.user;
 

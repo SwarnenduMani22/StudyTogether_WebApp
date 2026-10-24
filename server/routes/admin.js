@@ -8,6 +8,7 @@ import User from "../models/User.js";
 import Paper from "../models/Paper.js";
 import Transaction from "../models/Transaction.js";
 import PlatformKnowledge from "../models/PlatformKnowledge.js";
+import { grantCoins } from "../utils/coinManager.js";
 const router = express.Router();
 
 const escapeRegex = (value = "") =>
@@ -186,6 +187,126 @@ router.put("/users/:id/role", verifyToken, verifyAdmin, async (req, res) => {
     });
   }
 });
+
+/* =====================================================
+UPDATE USER ACCOUNT STATUS (DISABLE / ENABLE)
+PUT /api/v1/admin/users/:id/status
+PATCH /api/v1/admin/users/:id/status
+===================================================== */
+
+const handleUserStatus = async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { status, isActive, reason } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid user ID",
+      });
+    }
+
+    /* Prevent self-disable */
+    if (req.user._id.toString() === userId.toString()) {
+      return res.status(400).json({
+        success: false,
+        error: "You cannot disable your own account",
+      });
+    }
+
+    if (!reason || typeof reason !== "string" || !reason.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: "Reason is required and cannot be empty",
+      });
+    }
+
+    let isDisabling;
+    if (status) {
+      const normalized = status.toLowerCase().trim();
+      if (normalized === "disabled") {
+        isDisabling = true;
+      } else if (normalized === "active" || normalized === "enabled") {
+        isDisabling = false;
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid status value. Must be 'active' or 'disabled'",
+        });
+      }
+    } else if (typeof isActive === "boolean") {
+      isDisabling = !isActive;
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: "Status or isActive is required",
+      });
+    }
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: "User not found",
+      });
+    }
+
+    const trimmedReason = reason.trim();
+
+    if (isDisabling) {
+      user.isActive = false;
+      user.status = "disabled";
+      user.disabledReason = trimmedReason;
+      user.disabledAt = new Date();
+      user.disabledBy = req.user._id;
+      user.refreshToken = null; // Instantly invalidate active refresh token sessions
+    } else {
+      user.isActive = true;
+      user.status = "active";
+      user.disabledReason = null;
+      user.disabledAt = null;
+      user.disabledBy = null;
+    }
+
+    user.statusHistory.push({
+      action: isDisabling ? "disabled" : "enabled",
+      reason: trimmedReason,
+      performedBy: req.user._id,
+      performedAt: new Date(),
+    });
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: isDisabling
+        ? "User account disabled successfully"
+        : "User account re-enabled successfully",
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+        status: user.status,
+        disabledReason: user.disabledReason,
+        disabledAt: user.disabledAt,
+        disabledBy: user.disabledBy,
+      },
+    });
+  } catch (error) {
+    console.error("Status update error:", error);
+
+    res.status(500).json({
+      success: false,
+      error: "Server error while updating user status",
+    });
+  }
+};
+
+router.put("/users/:id/status", verifyToken, verifyAdmin, handleUserStatus);
+router.patch("/users/:id/status", verifyToken, verifyAdmin, handleUserStatus);
 /* =====================================================
 ADMIN DASHBOARD STATS
 GET /api/v1/admin/stats
@@ -448,6 +569,117 @@ router.post("/users/:id/refund", verifyToken, verifyAdmin, async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Refund failed",
+    });
+  }
+});
+
+/* =====================================================
+GRANT COINS (ADMIN MANUAL GRANT)
+POST /api/v1/admin/users/:id/grant-coins
+===================================================== */
+router.post("/users/:id/grant-coins", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const { amount, reason, idempotencyKey } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid user ID",
+      });
+    }
+
+    const targetUser = await User.findById(userId);
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        error: "User not found",
+      });
+    }
+
+    /* Reject grants to disabled accounts */
+    if (targetUser.isActive === false || targetUser.status === "disabled") {
+      return res.status(400).json({
+        success: false,
+        error: "Cannot grant coins to a disabled account",
+      });
+    }
+
+    const grantAmount = Number(amount);
+    if (!Number.isInteger(grantAmount) || grantAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Grant amount must be a positive integer",
+      });
+    }
+
+    const MAX_GRANT_AMOUNT = 10000;
+    if (grantAmount > MAX_GRANT_AMOUNT) {
+      return res.status(400).json({
+        success: false,
+        error: `Grant amount cannot exceed ${MAX_GRANT_AMOUNT} coins per grant`,
+      });
+    }
+
+    if (!reason || typeof reason !== "string" || !reason.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: "Grant reason is required and cannot be empty",
+      });
+    }
+
+    const key = (idempotencyKey || req.headers["idempotency-key"] || "").trim();
+    if (!key) {
+      return res.status(400).json({
+        success: false,
+        error: "idempotencyKey is required for safe retry handling",
+      });
+    }
+
+    const { updatedUser, transaction, duplicate } = await grantCoins(
+      targetUser,
+      grantAmount,
+      reason.trim(),
+      req.user._id,
+      key,
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: duplicate
+        ? `Coins previously granted (${grantAmount} coins)`
+        : `Successfully granted ${grantAmount} coins`,
+      coins: updatedUser.coins,
+      grantedAmount: grantAmount,
+      duplicate: Boolean(duplicate),
+      targetUser: {
+        _id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+      },
+      transaction: {
+        _id: transaction._id,
+        amount: transaction.amount,
+        type: transaction.type,
+        reason: transaction.reason,
+        status: transaction.status,
+        idempotencyKey: transaction.idempotencyKey,
+        createdAt: transaction.createdAt,
+      },
+    });
+  } catch (error) {
+    if (error.code === "IDEMPOTENCY_CONFLICT" || error.statusCode === 409) {
+      return res.status(409).json({
+        success: false,
+        error: error.message,
+      });
+    }
+
+    console.error("Grant coins error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Grant coins failed",
     });
   }
 });

@@ -60,6 +60,42 @@ export const changeUserRole = async (id, role) => {
 };
 
 /* =====================================================
+UPDATE USER ACCOUNT STATUS (ADMIN)
+===================================================== */
+
+export const updateUserStatus = async (id, { status, reason }) => {
+  validateId(id);
+
+  if (!status || !reason) {
+    throw new Error("Status and reason are required");
+  }
+
+  const res = await api.put(`/admin/users/${id}/status`, { status, reason });
+
+  return res.data;
+};
+
+/* =====================================================
+GRANT COINS TO USER (ADMIN)
+===================================================== */
+
+export const grantUserCoins = async (id, { amount, reason, idempotencyKey }) => {
+  validateId(id);
+
+  if (!amount || !reason || !idempotencyKey) {
+    throw new Error("Amount, reason, and idempotencyKey are required");
+  }
+
+  const res = await api.post(`/admin/users/${id}/grant-coins`, {
+    amount: Number(amount),
+    reason,
+    idempotencyKey,
+  });
+
+  return res.data;
+};
+
+/* =====================================================
 GET PENDING PAPERS (ADMIN APPROVAL)
 ===================================================== */
 

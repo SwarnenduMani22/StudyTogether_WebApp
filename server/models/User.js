@@ -37,6 +37,52 @@ const userSchema = new mongoose.Schema(
       default: "user",
       index: true,
     },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
+    status: {
+      type: String,
+      enum: ["active", "disabled"],
+      default: "active",
+      index: true,
+    },
+    disabledReason: {
+      type: String,
+      default: null,
+    },
+    disabledAt: {
+      type: Date,
+      default: null,
+    },
+    disabledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    statusHistory: [
+      {
+        action: {
+          type: String,
+          enum: ["disabled", "enabled"],
+          required: true,
+        },
+        reason: {
+          type: String,
+          required: true,
+        },
+        performedBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        performedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
 
     bookmarks: {
       type: [
@@ -52,6 +98,22 @@ const userSchema = new mongoose.Schema(
       default: 50,
       min: 0,
     },
+    appliedGrants: [
+      {
+        idempotencyKey: {
+          type: String,
+          required: true,
+        },
+        amount: {
+          type: Number,
+          required: true,
+        },
+        appliedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     badges: {
       type: [String],
       default: [],
@@ -136,6 +198,10 @@ userSchema.methods.toSafeObject = function () {
     rank: this.rank,
     lastActiveDate: this.lastActiveDate,
     dailyStreak: this.dailyStreak,
+    isActive: this.isActive !== false,
+    status: this.status || "active",
+    disabledReason: this.disabledReason || null,
+    disabledAt: this.disabledAt || null,
   };
 };
 

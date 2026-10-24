@@ -54,7 +54,9 @@ StudyTogether incentivizes academic resource sharing. Students who upload high-q
 *   **Leaderboard & Streaks**: Dynamic calculation of user ranks (Beginner 🥉, Explorer 🥈, Scholar 📘, Expert 🏆, Legend 👑) based on coins and approved uploads. Tracks daily streaks automatically to award 3-day and 7-day streak badges.
 *   **Public User Profiles**: Privacy-respecting contributor profiles displaying public badges, contributions metrics, and a monthly contribution activity chart.
 *   **Community Engagement**: Star ratings (one vote per user), multi-user comment feeds, and personal study material bookmarks.
-*   **Admin Dashboard**: Interactive metrics detailing total users, admins, views, downloads, comments, and transaction-safe aggregate system coin analytics.
+*   **Admin Dashboard & Moderation**: Interactive metrics detailing total users, admins, views, downloads, comments, and transaction-safe aggregate system coin analytics. Moderation queues allow inspecting submitted PDFs, approving with uploader rewards (+30 coins), or rejecting with storage cleanup.
+*   **Account Status Management**: Administrators can disable or re-enable user and admin accounts with mandatory audit reasons. Disabling an account immediately revokes refresh tokens, blocks future logins, and denies real-time access on all protected API endpoints. Administrators cannot disable their own accounts.
+*   **Manual Coin Grants & Resilient Ledger**: Administrators can grant custom coin amounts (up to 10,000 coins) with audit reasons and persistent idempotency keys. The grant engine leverages single-document atomicity on `User.appliedGrants`, sparse unique indexes, and a crash-recoverable state machine preventing double-crediting across concurrent requests or network retries.
 *   **Razorpay Gateway Integration**: Cryptographically verified checkout webhooks to securely buy Study Coins packages.
 *   **AI Study Copilot**: Fully-integrated RAG assistant featuring real PDF text extraction, OCR fallback for scanned papers, hybrid keyword (BM25) and semantic retrieval, secure prompt validation, conversation history pruner, and automated study notes, mcq quizzes, flashcards, and strategic study plans.
 
@@ -265,6 +267,11 @@ Vite compiles assets into `client/dist/` for static hosting (Vercel, Netlify, et
   email: { type: String, required: true, unique: true },
   password: { type: String, select: false },
   role: { type: String, enum: ["user", "admin"], default: "user" },
+  isActive: { type: Boolean, default: true },
+  status: { type: String, enum: ["active", "disabled"], default: "active" },
+  disabledReason: { type: String, default: null },
+  disabledAt: { type: Date, default: null },
+  disabledBy: { type: ObjectId, ref: "User", default: null },
   coins: { type: Number, default: 50, min: 0 },
   badges: { type: [String], default: [] },
   rank: { type: String, default: "Beginner" },
@@ -274,7 +281,9 @@ Vite compiles assets into `client/dist/` for static hosting (Vercel, Netlify, et
   dailyStreak: { type: Number, default: 0 },
   bookmarks: [{ type: ObjectId, ref: "Paper" }],
   previewedPapers: [{ type: ObjectId, ref: "Paper" }],
-  downloadedPapers: [{ type: ObjectId, ref: "Paper" }]
+  downloadedPapers: [{ type: ObjectId, ref: "Paper" }],
+  statusHistory: [{ status: String, reason: String, changedBy: ObjectId, changedAt: Date }],
+  appliedGrants: [{ idempotencyKey: String, amount: Number, appliedAt: Date }]
 }
 ```
 
@@ -299,8 +308,12 @@ Vite compiles assets into `client/dist/` for static hosting (Vercel, Netlify, et
 {
   user: { type: ObjectId, ref: "User", required: true },
   amount: { type: Number, required: true },
-  type: { type: String, enum: ["earned", "spent", "purchased", "refund", "bonus"], required: true },
-  reason: { type: String, required: true }
+  type: { type: String, enum: ["earned", "spent", "purchased", "refund", "bonus", "grant"], required: true },
+  reason: { type: String, required: true },
+  idempotencyKey: { type: String, sparse: true, unique: true },
+  balanceApplied: { type: Boolean, default: false },
+  status: { type: String, enum: ["pending", "completed", "failed"], default: "completed" },
+  metadata: { type: Schema.Types.Mixed, default: {} }
 }
 ```
 
@@ -350,6 +363,8 @@ Vite compiles assets into `client/dist/` for static hosting (Vercel, Netlify, et
 ### Admin Router (`/api/v1/admin`)
 *   `GET /stats` — Overall system & activity analytics.
 *   `GET /users` — Paginated admin search for users.
+*   `PUT /users/:id/status` — Disable or re-enable user/admin accounts with mandatory audit reasons.
+*   `POST /users/:id/grant-coins` — Manual coin grants with audit reason and idempotent retry safety.
 *   `DELETE /users/:id` — Delete user account (prevents self/last-admin deletions).
 *   `PUT /users/:id/role` — Modify user role.
 *   `POST /users/:id/refund` — Issue coin refund and log transaction.

@@ -13,12 +13,28 @@ const transactionSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ["earned", "spent", "purchased", "refund", "bonus"],
+    enum: ["earned", "spent", "purchased", "refund", "bonus", "grant"],
     required: true,
   },
   reason: {
     type: String,
     required: true,
+  },
+  performedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+  },
+  idempotencyKey: {
+    type: String,
+  },
+  status: {
+    type: String,
+    enum: ["completed", "pending", "failed"],
+    default: "completed",
+  },
+  balanceApplied: {
+    type: Boolean,
+    default: false,
   },
   paperId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -34,5 +50,6 @@ const transactionSchema = new mongoose.Schema({
 });
 
 transactionSchema.index({ user: 1, createdAt: -1 });
+transactionSchema.index({ idempotencyKey: 1 }, { unique: true, sparse: true });
 
 export default mongoose.model("Transaction", transactionSchema);

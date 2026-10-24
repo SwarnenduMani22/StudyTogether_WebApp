@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from "react";
 import api from "../api/axios";
 import Skeleton from "../components/common/Skeleton";
 import AdminCharts from "../components/admin/AdminCharts";
+import AccountStatusModal from "../components/admin/AccountStatusModal";
+import CoinGrantModal from "../components/admin/CoinGrantModal";
 import useAuth from "../hooks/useAuth";
 import toast from "react-hot-toast";
 import {
@@ -11,10 +13,12 @@ import {
 } from "../api/admin";
 
 const Admin = () => {
-  const { user: loggedInUser } = useAuth();
+  const { user: loggedInUser, updateUser } = useAuth();
 
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
+  const [statusModalUser, setStatusModalUser] = useState(null);
+  const [coinGrantUser, setCoinGrantUser] = useState(null);
 
   const [stats, setStats] = useState({
     users: 0,
@@ -547,55 +551,166 @@ const Admin = () => {
                     <th className="p-3 text-left">Name</th>
                     <th className="p-3 text-left">Email</th>
                     <th className="p-3 text-left">Role</th>
+                    <th className="p-3 text-left">Status</th>
+                    <th className="p-3 text-left">Coins</th>
                     <th className="p-3 text-left">Action</th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {filteredUsers.map((user) => (
-                    <tr key={user._id} className="border-b">
-                      <td className="p-3">{user.name}</td>
+                  {filteredUsers.map((user) => {
+                    const isActive =
+                      user.isActive !== false && user.status !== "disabled";
+                    const isSelf = loggedInUser?._id === user._id;
 
-                      <td className="p-3">{user.email}</td>
+                    return (
+                      <tr
+                        key={user._id}
+                        className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition"
+                      >
+                        <td className="p-3 font-medium">{user.name}</td>
 
-                      <td className="p-3">
-                        {loggedInUser?._id !== user._id ? (
-                          <select
-                            value={user.role}
-                            disabled={processing}
-                            onChange={(e) =>
-                              handleRoleChange(user._id, e.target.value)
+                        <td className="p-3 text-gray-600 dark:text-gray-300 font-mono text-xs">
+                          {user.email}
+                        </td>
+
+                        <td className="p-3">
+                          {!isSelf ? (
+                            <select
+                              value={user.role}
+                              disabled={processing}
+                              onChange={(e) =>
+                                handleRoleChange(user._id, e.target.value)
+                              }
+                              className="input py-1 text-xs"
+                            >
+                              <option value="user">User</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                          ) : (
+                            <span className="capitalize font-medium text-xs bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded">
+                              {user.role} (You)
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="p-3">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-xs font-semibold inline-block ${
+                              isActive
+                                ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300"
+                                : "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300"
+                            }`}
+                            title={
+                              user.disabledReason ||
+                              (isActive ? "Account active" : "Account disabled")
                             }
-                            className="input py-1"
                           >
-                            <option value="user">User</option>
-                            <option value="admin">Admin</option>
-                          </select>
-                        ) : (
-                          <span className="capitalize font-medium">
-                            {user.role}
+                            {isActive ? "Active" : "Disabled"}
                           </span>
-                        )}
-                      </td>
+                        </td>
 
-                      <td className="p-3">
-                        {loggedInUser?._id !== user._id && (
-                          <button
-                            disabled={processing}
-                            onClick={() => handleDelete(user._id)}
-                            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded disabled:opacity-50"
-                          >
-                            Delete
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="p-3">
+                          <span className="font-bold text-yellow-600 dark:text-yellow-400 text-sm">
+                            {user.coins || 0} 🪙
+                          </span>
+                        </td>
+
+                        <td className="p-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {/* Coin Grant Button */}
+                            <button
+                              disabled={processing || !isActive}
+                              onClick={() => setCoinGrantUser(user)}
+                              title={
+                                !isActive
+                                  ? "Cannot grant coins to disabled user"
+                                  : "Grant custom coins"
+                              }
+                              className="bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1 text-xs rounded shadow-sm disabled:opacity-40 transition font-medium"
+                            >
+                              🪙 Grant Coins
+                            </button>
+
+                            {/* Enable / Disable Button */}
+                            {isSelf ? (
+                              <button
+                                disabled
+                                title="You cannot disable your own account"
+                                className="bg-gray-300 dark:bg-gray-700 text-gray-500 cursor-not-allowed px-2.5 py-1 text-xs rounded font-medium"
+                              >
+                                Disable
+                              </button>
+                            ) : (
+                              <button
+                                disabled={processing}
+                                onClick={() => setStatusModalUser(user)}
+                                className={`text-white px-2.5 py-1 text-xs rounded shadow-sm disabled:opacity-50 transition font-medium ${
+                                  isActive
+                                    ? "bg-orange-500 hover:bg-orange-600"
+                                    : "bg-green-600 hover:bg-green-700"
+                                }`}
+                              >
+                                {isActive ? "Disable" : "Enable"}
+                              </button>
+                            )}
+
+                            {/* Delete Button */}
+                            {!isSelf && (
+                              <button
+                                disabled={processing}
+                                onClick={() => handleDelete(user._id)}
+                                className="bg-red-500 hover:bg-red-600 text-white px-2.5 py-1 text-xs rounded shadow-sm disabled:opacity-50 transition font-medium"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </div>
+
+        {/* MODALS */}
+        <AccountStatusModal
+          user={statusModalUser}
+          currentAdmin={loggedInUser}
+          isOpen={!!statusModalUser}
+          onClose={() => setStatusModalUser(null)}
+          onSuccess={(updatedUser) => {
+            setUsers((prev) =>
+              prev.map((u) =>
+                u._id === updatedUser._id ? { ...u, ...updatedUser } : u,
+              ),
+            );
+            fetchStats();
+          }}
+        />
+
+        <CoinGrantModal
+          user={coinGrantUser}
+          isOpen={!!coinGrantUser}
+          onClose={() => setCoinGrantUser(null)}
+          onSuccess={({ user: updatedUser }) => {
+            setUsers((prev) =>
+              prev.map((u) =>
+                u._id === updatedUser._id
+                  ? { ...u, coins: updatedUser.coins }
+                  : u,
+              ),
+            );
+            fetchTopCoinHolders();
+            fetchCoinAnalytics();
+            if (loggedInUser?._id === updatedUser._id && updateUser) {
+              updateUser({ ...loggedInUser, coins: updatedUser.coins });
+            }
+          }}
+        />
       </div>
     </div>
   );

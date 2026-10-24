@@ -369,7 +369,7 @@ router.get("/coin-overview", verifyToken, async (req, res) => {
       {
         $group: {
           _id: null,
-          totalEarned: { $sum: { $cond: [{ $in: ["$type", ["earned", "bonus", "refund"]] }, "$amount", 0] } },
+          totalEarned: { $sum: { $cond: [{ $in: ["$type", ["earned", "bonus", "refund", "grant"]] }, "$amount", 0] } },
           totalSpent: { $sum: { $cond: [{ $eq: ["$type", "spent"] }, "$amount", 0] } },
           totalPurchased: { $sum: { $cond: [{ $eq: ["$type", "purchased"] }, "$amount", 0] } }
         }

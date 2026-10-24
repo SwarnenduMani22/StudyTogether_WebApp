@@ -49,6 +49,10 @@ api.interceptors.response.use(
     /* ================= REFRESH TOKEN LOGIC ================= */
 
     if (status === 401 && !error.config._retry) {
+      if (error.config?.skipAuthRedirect) {
+        return Promise.reject(error);
+      }
+
       error.config._retry = true;
 
       try {
@@ -73,7 +77,9 @@ api.interceptors.response.use(
         localStorage.removeItem("user");
         localStorage.removeItem("accessToken");
 
-        window.location.replace("/login");
+        if (!error.config?.skipAuthRedirect) {
+          window.location.replace("/login");
+        }
         return Promise.reject(err);
       }
     }

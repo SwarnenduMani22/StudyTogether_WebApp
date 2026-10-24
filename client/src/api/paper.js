@@ -88,8 +88,11 @@ export const deletePaper = async (id) => {
 TRENDING PAPERS
 ===================================================== */
 
-export const getTrendingPapers = async () => {
-  const res = await api.get("/papers/trending");
+export const getTrendingPapers = async (config = {}) => {
+  const res = await api.get("/papers/trending", {
+    skipAuthRedirect: true,
+    ...config,
+  });
 
   return res.data;
 };

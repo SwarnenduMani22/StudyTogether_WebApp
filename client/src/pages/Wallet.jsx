@@ -213,7 +213,7 @@ const Wallet = () => {
         <h2 className="text-xl font-semibold mb-4">Transaction History</h2>
 
         <div className="flex flex-wrap gap-2 mb-4">
-          {["all", "earned", "spent", "purchase", "bonus", "refund"].map(
+          {["all", "earned", "spent", "purchase", "bonus", "refund", "grant"].map(
             (type) => (
               <button
                 key={type}
@@ -227,7 +227,7 @@ const Wallet = () => {
                     : "bg-gray-200 dark:bg-gray-700"
                 }`}
               >
-                {type}
+                {type === "grant" ? "Admin Grants" : type}
               </button>
             ),
           )}
@@ -258,6 +258,7 @@ const Wallet = () => {
                       {item.type === "purchase" && "💳 Purchase"}
                       {item.type === "bonus" && "🎁 Bonus"}
                       {item.type === "refund" && "↩ Refund"}
+                      {item.type === "grant" && "👑 Admin Grant"}
                     </p>
 
                     {item.paperTitle && (
@@ -277,6 +278,7 @@ const Wallet = () => {
                         "purchase",
                         "purchased",
                         "refund",
+                        "grant",
                       ].includes(item.type)
                         ? "text-green-500"
                         : "text-red-500"
@@ -288,6 +290,7 @@ const Wallet = () => {
                       "purchase",
                       "purchased",
                       "refund",
+                      "grant",
                     ].includes(item.type)
                       ? "+"
                       : "-"}

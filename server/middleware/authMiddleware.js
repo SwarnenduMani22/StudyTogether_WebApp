@@ -74,13 +74,20 @@ const authMiddleware = async (req, res, next) => {
     /* ================= FIND USER ================= */
 
     const user = await User.findById(decoded.id)
-      .select("_id name email role")
+      .select("_id name email role isActive status")
       .lean();
 
     if (!user) {
       return res.status(401).json({
         success: false,
         error: "Unauthorized access",
+      });
+    }
+
+    if (user.isActive === false || user.status === "disabled") {
+      return res.status(403).json({
+        success: false,
+        error: "Account has been disabled. Please contact support.",
       });
     }
 

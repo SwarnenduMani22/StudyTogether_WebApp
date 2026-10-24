@@ -13,6 +13,11 @@ const TrendingPapers = () => {
 
   useEffect(() => {
     const fetchTrending = async () => {
+      if (!localStorage.getItem("accessToken")) {
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         setError("");
@@ -25,8 +30,10 @@ const TrendingPapers = () => {
 
         setPapers(Array.isArray(papersData) ? papersData.slice(0, 6) : []);
       } catch (err) {
-        console.error("Trending load failed:", err);
-        setError("Failed to load trending papers");
+        if (err?.response?.status !== 401) {
+          console.error("Trending load failed:", err);
+          setError("Failed to load trending papers");
+        }
       } finally {
         setLoading(false);
       }

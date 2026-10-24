@@ -113,4 +113,5 @@ docker-compose.override.yml
 # Temporary files
 *.bak
 *.old
+powershell.cmd
 *.orig
