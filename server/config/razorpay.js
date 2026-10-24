@@ -1,3 +1,4 @@
+import "./env.js";
 import Razorpay from "razorpay";
 
 const razorpay = new Razorpay({
