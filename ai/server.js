@@ -1,4 +1,6 @@
 import express from "express";
+import path from "path";
+import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import cors from "cors";
 import helmet from "helmet";
@@ -9,11 +11,23 @@ import rateLimit from "express-rate-limit";
 
 import aiRoutes from "./routes/index.js";
 import { checkOllamaHealth } from "./services/modelManager.js";
+import verifyInternalKey from "./middleware/internalAuth.js";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Preserve environment precedence: existing env > ai/.env > root .env fallback
 dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 const app = express();
 const PORT = process.env.AI_PORT || 5001;
+
+/* ================= ENV VALIDATION ================= */
+if (process.env.NODE_ENV === "production" && !process.env.INTERNAL_SERVICE_KEY) {
+  console.error("❌ INTERNAL_SERVICE_KEY is required in production");
+  process.exit(1);
+}
 
 // Global Middleware
 app.use(helmet());
@@ -39,6 +53,9 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 app.use("/api", limiter);
+
+// Guard internal AI routes with service-to-service key
+app.use("/api/v1/internal/ai", verifyInternalKey);
 
 // AI internal endpoints
 app.post("/api/v1/internal/ai/process", async (req, res) => {
@@ -98,7 +115,7 @@ mongoose
 
     // Check local Ollama health
     const ollamaStatus = await checkOllamaHealth();
-    console.log("Ollama Status:", ollamaStatus ? "Healthy" : "Unreachable");
+    console.log("Ollama Status:", ollamaStatus?.success ? "Healthy" : "Unreachable");
 
     app.listen(PORT, () => {
       console.log(`AI Module running on port ${PORT}`);

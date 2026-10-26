@@ -79,7 +79,7 @@ DELETE PAPER
 export const deletePaper = async (id) => {
   validateId(id);
 
-  const res = await api.delete(`/papers/admin/reject/${id}`);
+  const res = await api.delete(`/papers/${id}`);
 
   return res.data;
 };

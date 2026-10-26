@@ -1,7 +1,13 @@
 import { getCurrentModel, fetchWithRetry } from "./modelManager.js";
 
+const getOllamaGenerateUrl = () => {
+  const rawUrl = process.env.OLLAMA_URL || process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+  const cleanBase = rawUrl.replace(/\/+$/, "");
+  return cleanBase.endsWith("/api/generate") ? cleanBase : `${cleanBase}/api/generate`;
+};
+
 export const queryOllama = async (prompt, options = {}) => {
-  const ollamaUrl = process.env.OLLAMA_URL || "http://localhost:11434/api/generate";
+  const ollamaUrl = getOllamaGenerateUrl();
   const model = options.model || getCurrentModel();
   const temperature = options.temperature !== undefined ? options.temperature : 0.7;
   const maxTokens = options.maxTokens || 500;
@@ -45,7 +51,7 @@ export const queryOllama = async (prompt, options = {}) => {
 
 // Progressive Token Streaming Service
 export const queryOllamaStream = async (prompt, onChunk, options = {}) => {
-  const ollamaUrl = process.env.OLLAMA_URL || "http://localhost:11434/api/generate";
+  const ollamaUrl = getOllamaGenerateUrl();
   const model = options.model || getCurrentModel();
   const temperature = options.temperature !== undefined ? options.temperature : 0.7;
   const maxTokens = options.maxTokens || 500;
@@ -74,10 +80,15 @@ export const queryOllamaStream = async (prompt, onChunk, options = {}) => {
     const reader = res.body;
     if (!reader) return;
 
+    const decoder = new TextDecoder();
+    let buffer = "";
+
     for await (const chunk of reader) {
-      const text = chunk.toString();
-      const lines = text.split("\n").filter(Boolean);
+      buffer += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop(); // Retain incomplete line
       for (const line of lines) {
+        if (!line.trim()) continue;
         try {
           const parsed = JSON.parse(line);
           if (parsed.response) {
@@ -86,6 +97,18 @@ export const queryOllamaStream = async (prompt, onChunk, options = {}) => {
         } catch (err) {
           // ignore parsing partial chunk lines
         }
+      }
+    }
+
+    buffer += decoder.decode();
+    if (buffer.trim()) {
+      try {
+        const parsed = JSON.parse(buffer);
+        if (parsed.response) {
+          onChunk(parsed.response);
+        }
+      } catch (err) {
+        // ignore
       }
     }
   } catch (error) {

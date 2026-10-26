@@ -39,6 +39,11 @@ if (!process.env.JWT_REFRESH_SECRET) {
   process.exit(1);
 }
 
+if (process.env.NODE_ENV === "production" && !process.env.INTERNAL_SERVICE_KEY) {
+  console.error("❌ INTERNAL_SERVICE_KEY missing in .env");
+  process.exit(1);
+}
+
 /* ================= SETTINGS ================= */
 
 app.set("trust proxy", 1);
@@ -54,7 +59,14 @@ app.use(
 
 /* ================= BODY PARSER ================= */
 
-app.use(express.json({ limit: "20mb" }));
+app.use(
+  express.json({
+    limit: "20mb",
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 
 /* ================= COOKIE PARSER ================= */
@@ -123,7 +135,6 @@ const sensitiveActionLimiter = rateLimit({
 
 app.use("/api/v1", limiter);
 app.use("/api/v1/auth", authLimiter);
-app.use("/api/v1/coins/purchase", sensitiveActionLimiter);
 app.use("/api/v1/papers/upload", sensitiveActionLimiter);
 
 /* ================= LOGGER ================= */
@@ -142,9 +153,6 @@ app.use("/uploads", express.static(uploadsPath));
 /* ================= API PREFIX ================= */
 
 const API = "/api/v1";
-/* ================= WEBHOOK ================= */
-
-app.use("/api/v1/payment/webhook", express.raw({ type: "application/json" }));
 /* ================= ROUTES ================= */
 
 app.use(`${API}/auth`, authRoutes);

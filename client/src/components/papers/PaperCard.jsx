@@ -40,6 +40,7 @@ const PaperCard = ({ paper, onDelete }) => {
   );
 
   const [hasRated, setHasRated] = useState(false);
+  const [previewPdfUrl, setPreviewPdfUrl] = useState("");
 
   /* ================= SYNC BOOKMARK ================= */
 
@@ -51,9 +52,14 @@ const PaperCard = ({ paper, onDelete }) => {
 
   if (!paper) return null;
 
-  /* ================= SAFE PDF URL ================= */
+  /* ================= OWNERSHIP / PERMISSIONS ================= */
 
-  const pdfUrl = resolvePdfUrl(paper?.pdfLink);
+  const uploadedById = paper?.uploadedBy?._id || paper?.uploadedBy;
+  const isOwner = Boolean(
+    user?._id && uploadedById && String(uploadedById) === String(user._id)
+  );
+  const isAdmin = user?.role === "admin";
+  const canDelete = isOwner || isAdmin;
 
   /* ================= AUTH CHECK ================= */
 
@@ -74,12 +80,19 @@ const PaperCard = ({ paper, onDelete }) => {
     try {
       setPreviewLoading(true);
 
-      await incrementView(paper._id);
+      const res = await incrementView(paper._id);
       setViews((prev) => prev + 1);
 
-      setPreview(true);
+      const authorizedUrl = resolvePdfUrl(res?.pdfLink);
+      if (authorizedUrl) {
+        setPreviewPdfUrl(authorizedUrl);
+        setPreview(true);
+      } else {
+        toast.error("Unable to load preview URL");
+      }
     } catch (error) {
       console.error("Preview failed:", error);
+      toast.error(error?.response?.data?.error || "Preview failed");
     } finally {
       setPreviewLoading(false);
     }
@@ -91,19 +104,25 @@ const PaperCard = ({ paper, onDelete }) => {
     if (!requireLogin()) return;
 
     try {
-      await incrementDownload(paper._id);
+      const res = await incrementDownload(paper._id);
       setDownloads((prev) => prev + 1);
 
-      window.open(pdfUrl, "_blank");
+      const authorizedUrl = resolvePdfUrl(res?.pdfLink);
+      if (authorizedUrl) {
+        window.open(authorizedUrl, "_blank");
+      } else {
+        toast.error("Unable to load download URL");
+      }
     } catch (error) {
       console.error("Download failed:", error);
+      toast.error(error?.response?.data?.error || "Download failed");
     }
   };
 
   /* ================= DELETE ================= */
 
   const handleDelete = async () => {
-    if (!user || user.role !== "admin") return;
+    if (!canDelete) return;
 
     if (!window.confirm("Are you sure you want to delete this paper?")) return;
 
@@ -115,8 +134,8 @@ const PaperCard = ({ paper, onDelete }) => {
       toast.success("Paper deleted successfully");
 
       if (onDelete) onDelete();
-    } catch {
-      toast.error("Failed to delete paper");
+    } catch (error) {
+      toast.error(error?.response?.data?.error || "Failed to delete paper");
     } finally {
       setDeleting(false);
     }
@@ -239,14 +258,16 @@ const PaperCard = ({ paper, onDelete }) => {
             {bookmarked ? "⭐ Saved" : "🔖 Save"}
           </button>
 
-          {user?.role === "admin" && (
+          {canDelete && (
             <>
-              <button
-                onClick={() => setEditing(true)}
-                className="bg-yellow-600 text-white px-3 py-1 rounded text-sm"
-              >
-                Edit
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setEditing(true)}
+                  className="bg-yellow-600 text-white px-3 py-1 rounded text-sm"
+                >
+                  Edit
+                </button>
+              )}
 
               <button
                 onClick={handleDelete}
@@ -318,8 +339,8 @@ const PaperCard = ({ paper, onDelete }) => {
         </div>
       )}
 
-      {preview && (
-        <PDFModal pdfLink={pdfUrl} onClose={() => setPreview(false)} />
+      {preview && previewPdfUrl && (
+        <PDFModal pdfLink={previewPdfUrl} onClose={() => { setPreview(false); setPreviewPdfUrl(""); }} />
       )}
     </>
   );

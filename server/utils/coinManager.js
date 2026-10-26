@@ -1,5 +1,6 @@
 import User from "../models/User.js";
 import Transaction from "../models/Transaction.js";
+import Payment from "../models/Payment.js";
 
 export const addCoins = async (
   user,
@@ -35,7 +36,7 @@ export const spendCoins = async (
   const result = await User.findOneAndUpdate(
     { _id: user._id, coins: { $gte: amount } },
     { $inc: { coins: -amount } },
-    { new: true }
+    { returnDocument: "after" }
   );
 
   if (!result) {
@@ -59,20 +60,181 @@ export const purchaseCoins = async (
   amount,
   packageName,
   transactionId,
+  idempotencyKey = null,
 ) => {
-  await User.findOneAndUpdate(
-    { _id: user._id },
-    { $inc: { coins: amount } }
+  const userId = user._id || user;
+  const key =
+    idempotencyKey || (transactionId ? `purchase_tx_${transactionId}` : null);
+
+  if (key) {
+    const existingTx = await Transaction.findOne({ idempotencyKey: key });
+    if (
+      existingTx &&
+      existingTx.status === "completed" &&
+      existingTx.balanceApplied
+    ) {
+      const currentUser = await User.findById(userId).select("coins");
+      if (user && typeof user.coins === "number" && currentUser) {
+        user.coins = currentUser.coins;
+      }
+      return {
+        duplicate: true,
+        transaction: existingTx,
+        coins: currentUser?.coins,
+      };
+    }
+  }
+
+  let transaction;
+  if (key) {
+    try {
+      transaction = await Transaction.create({
+        user: userId,
+        amount,
+        type: "purchased",
+        reason:
+          (packageName || "Coin Purchase") +
+          (transactionId ? ` (Tx: ${transactionId})` : ""),
+        idempotencyKey: key,
+        status: "pending",
+        balanceApplied: false,
+      });
+    } catch (err) {
+      if (err.code === 11000) {
+        const concurrentTx = await Transaction.findOne({ idempotencyKey: key });
+        if (concurrentTx && concurrentTx.balanceApplied) {
+          const currentUser = await User.findById(userId).select("coins");
+          if (user && typeof user.coins === "number" && currentUser) {
+            user.coins = currentUser.coins;
+          }
+          return {
+            duplicate: true,
+            transaction: concurrentTx,
+            coins: currentUser?.coins,
+          };
+        }
+        transaction = concurrentTx;
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  const updatedUser = await User.findOneAndUpdate(
+    { _id: userId },
+    { $inc: { coins: amount } },
+    { returnDocument: "after" }
   );
 
-  await Transaction.create({
-    user: user._id,
-    amount,
-    type: "purchased",
-    reason: (packageName || "Coin Purchase") + (transactionId ? ` (Tx: ${transactionId})` : ""),
-  });
+  if (transaction) {
+    transaction.status = "completed";
+    transaction.balanceApplied = true;
+    await transaction.save();
+  } else if (!key) {
+    transaction = await Transaction.create({
+      user: userId,
+      amount,
+      type: "purchased",
+      reason:
+        (packageName || "Coin Purchase") +
+        (transactionId ? ` (Tx: ${transactionId})` : ""),
+      status: "completed",
+      balanceApplied: true,
+    });
+  }
 
-  user.coins += amount; // Sync memory object
+  if (user && typeof user.coins === "number" && updatedUser) {
+    user.coins = updatedUser.coins;
+  }
+
+  return { duplicate: false, transaction, coins: updatedUser?.coins };
+};
+
+export const fulfillRazorpayPayment = async ({
+  orderId,
+  paymentId,
+  signature = "",
+  userId = null,
+}) => {
+  if (!orderId) {
+    return { success: false, statusCode: 400, error: "Order ID is required" };
+  }
+
+  const existingPayment = await Payment.findOne({ orderId });
+  if (!existingPayment) {
+    return {
+      success: false,
+      statusCode: 404,
+      error: "Payment record not found",
+    };
+  }
+
+  if (userId && existingPayment.user.toString() !== userId.toString()) {
+    return {
+      success: false,
+      statusCode: 403,
+      error: "Unauthorized: payment order belongs to another user",
+    };
+  }
+
+  const idempotencyKey = `razorpay_order_${orderId}`;
+
+  // If already captured, return safe replay without re-crediting
+  if (existingPayment.status === "captured") {
+    const user = await User.findById(existingPayment.user).select("coins");
+    return {
+      success: true,
+      alreadyCaptured: true,
+      payment: existingPayment,
+      coins: user?.coins ?? 0,
+    };
+  }
+
+  // Atomic conditional status transition: only one caller can transition from created/pending to captured
+  const updatedPayment = await Payment.findOneAndUpdate(
+    {
+      orderId,
+      status: { $in: ["created", "pending"] },
+    },
+    {
+      $set: {
+        status: "captured",
+        paymentId: paymentId || existingPayment.paymentId,
+        signature: signature || existingPayment.signature || "",
+      },
+    },
+    { returnDocument: "after" }
+  );
+
+  if (!updatedPayment) {
+    const recheckPayment = await Payment.findOne({ orderId });
+    const user = await User.findById(
+      recheckPayment?.user || existingPayment.user
+    ).select("coins");
+    return {
+      success: true,
+      alreadyCaptured: true,
+      payment: recheckPayment,
+      coins: user?.coins ?? 0,
+    };
+  }
+
+  // Idempotently apply coin credit using the established idempotencyKey
+  const creditResult = await purchaseCoins(
+    updatedPayment.user,
+    updatedPayment.coins,
+    updatedPayment.packageName,
+    paymentId || orderId,
+    idempotencyKey
+  );
+
+  return {
+    success: true,
+    alreadyCaptured: false,
+    payment: updatedPayment,
+    coins: creditResult.coins,
+    transaction: creditResult.transaction,
+  };
 };
 
 export const grantCoins = async (
@@ -299,4 +461,254 @@ export const grantCoins = async (
   }
 
   return { updatedUser, transaction, duplicate: false };
+};
+
+/* ==========================================
+PURCHASE PAPER ENTITLEMENT (ATOMIC & IDEMPOTENT)
+========================================== */
+
+export const purchasePaperEntitlement = async ({
+  userId,
+  paperId,
+  entitlementType, // "preview" | "download"
+  paperTitle = "",
+}) => {
+  const trimmedUserId = userId.toString();
+  const trimmedPaperId = paperId.toString();
+  const idempotencyKey = `${entitlementType}_${trimmedUserId}_${trimmedPaperId}`;
+  const entitlementField =
+    entitlementType === "preview" ? "previewedPapers" : "downloadedPapers";
+
+  const executePurchase = async (tx) => {
+    let updatedUser = null;
+    let deductedAmount = 0;
+
+    if (entitlementType === "preview") {
+      deductedAmount = 10;
+      updatedUser = await User.findOneAndUpdate(
+        {
+          _id: userId,
+          coins: { $gte: 10 },
+          previewedPapers: { $ne: paperId },
+          downloadedPapers: { $ne: paperId },
+        },
+        {
+          $inc: { coins: -10 },
+          $addToSet: { previewedPapers: paperId },
+        },
+        { returnDocument: "after" }
+      );
+    } else {
+      // Download Attempt 1 (Discounted Previewed: 30 coins)
+      deductedAmount = 30;
+      updatedUser = await User.findOneAndUpdate(
+        {
+          _id: userId,
+          coins: { $gte: 30 },
+          previewedPapers: paperId,
+          downloadedPapers: { $ne: paperId },
+        },
+        {
+          $inc: { coins: -30 },
+          $addToSet: { downloadedPapers: paperId },
+        },
+        { returnDocument: "after" }
+      );
+
+      // Download Attempt 2 (Direct Download: 40 coins)
+      if (!updatedUser) {
+        deductedAmount = 40;
+        updatedUser = await User.findOneAndUpdate(
+          {
+            _id: userId,
+            coins: { $gte: 40 },
+            previewedPapers: { $ne: paperId },
+            downloadedPapers: { $ne: paperId },
+          },
+          {
+            $inc: { coins: -40 },
+            $addToSet: { downloadedPapers: paperId, previewedPapers: paperId },
+          },
+          { returnDocument: "after" }
+        );
+      }
+    }
+
+    if (updatedUser) {
+      tx.amount = deductedAmount;
+      tx.status = "completed";
+      tx.balanceApplied = true;
+      await tx.save();
+
+      return {
+        alreadyUnlocked: false,
+        coins: updatedUser.coins,
+        transaction: tx,
+      };
+    }
+
+    // Atomic update matched 0 documents — identify reason
+    const freshUser = await User.findById(userId)
+      .select("coins previewedPapers downloadedPapers")
+      .lean();
+
+    if (!freshUser) {
+      tx.status = "failed";
+      await tx.save();
+      const error = new Error("User not found");
+      error.status = 404;
+      throw error;
+    }
+
+    const isNowEntitled =
+      freshUser[entitlementField]?.some(
+        (id) => id.toString() === trimmedPaperId
+      ) ||
+      (entitlementType === "preview" &&
+        freshUser.downloadedPapers?.some(
+          (id) => id.toString() === trimmedPaperId
+        ));
+
+    if (isNowEntitled) {
+      tx.status = "failed";
+      tx.reason = (tx.reason || "") + " (Superseded by concurrent purchase)";
+      await tx.save();
+      return {
+        alreadyUnlocked: true,
+        coins: freshUser.coins,
+        transaction: tx,
+      };
+    }
+
+    tx.status = "failed";
+    tx.reason = "Insufficient coins";
+    await tx.save();
+
+    const coinErr = new Error("INSUFFICIENT_COINS");
+    coinErr.status = 400;
+    throw coinErr;
+  };
+
+  const handleExistingTx = async (existingTx) => {
+    const currentUser = await User.findById(userId)
+      .select("coins previewedPapers downloadedPapers")
+      .lean();
+
+    if (!currentUser) {
+      const error = new Error("User not found");
+      error.status = 404;
+      throw error;
+    }
+
+    const isAlreadyEntitled =
+      currentUser[entitlementField]?.some(
+        (id) => id.toString() === trimmedPaperId
+      ) ||
+      (entitlementType === "preview" &&
+        currentUser.downloadedPapers?.some(
+          (id) => id.toString() === trimmedPaperId
+        ));
+
+    // Case 1: Transaction completed AND balance applied / entitled -> Safe replay
+    if (
+      existingTx.status === "completed" &&
+      (existingTx.balanceApplied || isAlreadyEntitled)
+    ) {
+      return {
+        alreadyUnlocked: true,
+        coins: currentUser.coins,
+        transaction: existingTx,
+      };
+    }
+
+    // Case 2: Process crashed after User update, before transaction was marked completed
+    if (isAlreadyEntitled && existingTx.status === "pending") {
+      existingTx.status = "completed";
+      existingTx.balanceApplied = true;
+      await existingTx.save();
+      return {
+        alreadyUnlocked: true,
+        coins: currentUser.coins,
+        transaction: existingTx,
+        recovered: true,
+      };
+    }
+
+    // Case 3: Concurrent in-flight request
+    if (existingTx.status === "pending") {
+      // Bounded poll (up to 300ms) for in-flight winner
+      for (let i = 0; i < 3; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        const pollTx = await Transaction.findById(existingTx._id).lean();
+        if (pollTx?.status === "completed") {
+          const fresh = await User.findById(userId).select("coins").lean();
+          return {
+            alreadyUnlocked: true,
+            coins: fresh?.coins ?? currentUser.coins,
+            transaction: pollTx,
+          };
+        }
+      }
+      const inProgressError = new Error(
+        "Purchase is currently in progress. Please retry shortly."
+      );
+      inProgressError.code = "IDEMPOTENCY_IN_PROGRESS";
+      inProgressError.status = 409;
+      throw inProgressError;
+    }
+
+    // Case 4: Previous attempt failed (e.g. was insufficient coins before user funded account)
+    if (existingTx.status === "failed") {
+      if (isAlreadyEntitled) {
+        return {
+          alreadyUnlocked: true,
+          coins: currentUser.coins,
+          transaction: existingTx,
+        };
+      }
+      existingTx.status = "pending";
+      existingTx.balanceApplied = false;
+      await existingTx.save();
+      return executePurchase(existingTx);
+    }
+
+    return {
+      alreadyUnlocked: isAlreadyEntitled,
+      coins: currentUser.coins,
+      transaction: existingTx,
+    };
+  };
+
+  // 1. Check for existing transaction with deterministic key
+  const existingTx = await Transaction.findOne({ idempotencyKey });
+  if (existingTx) {
+    return await handleExistingTx(existingTx);
+  }
+
+  // 2. Insert Transaction record with status "pending" (protected by unique index on idempotencyKey)
+  let transaction;
+  try {
+    transaction = await Transaction.create({
+      user: userId,
+      amount: 0,
+      type: "spent",
+      reason: entitlementType === "preview" ? "Preview Paper" : "Download Paper",
+      paperId,
+      paperTitle,
+      idempotencyKey,
+      status: "pending",
+      balanceApplied: false,
+    });
+  } catch (err) {
+    if (err.code === 11000) {
+      const concurrentTx = await Transaction.findOne({ idempotencyKey });
+      if (concurrentTx) {
+        return await handleExistingTx(concurrentTx);
+      }
+    }
+    throw err;
+  }
+
+  // 3. Execute atomic conditional purchase
+  return await executePurchase(transaction);
 };

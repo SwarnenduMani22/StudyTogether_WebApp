@@ -117,7 +117,7 @@ router.get("/profile", verifyToken, async (req, res) => {
       .select("-password")
       .populate({
         path: "bookmarks",
-        select: "title subject semester pdfLink",
+        select: "title subject semester",
       });
     if (!user) {
       return res.status(404).json({

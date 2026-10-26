@@ -354,7 +354,9 @@ Answer:`;
     // Save Assistant message
     session.messages.push({
       sender: "assistant",
-      content: completeAnswer,
+      content:
+        completeAnswer.trim() ||
+        "I am here to help, but no response was generated. Please try again.",
       citations,
     });
 

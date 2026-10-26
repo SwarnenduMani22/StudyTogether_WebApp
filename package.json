@@ -4,7 +4,9 @@
   "scripts": {
     "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
     "server": "npm run dev --prefix server",
-    "client": "npm run dev --prefix client"
+    "client": "npm run dev --prefix client",
+    "ai": "node ai/server.js",
+    "dev:all": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\" \"node ai/server.js\""
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

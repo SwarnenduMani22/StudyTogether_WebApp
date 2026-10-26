@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import aiApi from "../api/aiAxios";
+import aiApi, { getAiStreamUrl } from "../api/aiAxios";
 import toast from "react-hot-toast";
 
 const AIAssistant = () => {
@@ -53,14 +53,12 @@ const AIAssistant = () => {
     setLoading(true);
 
     const token = localStorage.getItem("accessToken");
-    const streamUrl =
-      (import.meta.env.VITE_AI_API_URL || "http://localhost:5001/api/v1") +
-      "/chat/stream";
+    const streamUrl = getAiStreamUrl();
+
+    let assistantBubbleAdded = false;
+    let streamedResponse = "";
 
     try {
-      // Create empty assistant bubble to stream into
-      setMessages((prev) => [...prev, { sender: "assistant", content: "" }]);
-
       const response = await fetch(streamUrl, {
         method: "POST",
         headers: {
@@ -74,48 +72,127 @@ const AIAssistant = () => {
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to initialize stream");
+      if (!response.ok) {
+        let errMessage = "Failed to initialize stream";
+        try {
+          const errData = await response.json();
+          if (errData?.error) errMessage = errData.error;
+        } catch {
+          // ignore if response body is not JSON
+        }
+        throw new Error(errMessage);
+      }
 
-      const reader = response.body.getReader();
+      // Add assistant bubble only after successful connection
+      setMessages((prev) => [...prev, { sender: "assistant", content: "" }]);
+      assistantBubbleAdded = true;
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("Streaming reader not available");
+      }
+
       const decoder = new TextDecoder();
       let finished = false;
-      let streamedResponse = "";
+      let buffer = "";
+
+      const processLine = (line) => {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data: ")) return;
+        const jsonStr = trimmed.slice(6).trim();
+        if (!jsonStr) return;
+
+        try {
+          const payload = JSON.parse(jsonStr);
+          if (payload.error) {
+            toast.error(payload.error);
+            if (streamedResponse) {
+              streamedResponse += `\n\n*[${payload.error}]*`;
+              setMessages((prev) => {
+                const updated = [...prev];
+                if (updated.length > 0) {
+                  updated[updated.length - 1] = {
+                    sender: "assistant",
+                    content: streamedResponse,
+                  };
+                }
+                return updated;
+              });
+            }
+          } else if (payload.token) {
+            streamedResponse += payload.token;
+            setMessages((prev) => {
+              const updated = [...prev];
+              if (updated.length > 0) {
+                updated[updated.length - 1] = {
+                  sender: "assistant",
+                  content: streamedResponse,
+                };
+              }
+              return updated;
+            });
+          } else if (payload.done) {
+            if (payload.conversationId) {
+              setConversationId(payload.conversationId);
+            }
+          }
+        } catch (e) {
+          // ignore malformed SSE event payloads safely
+        }
+      };
 
       while (!finished) {
         const { value, done } = await reader.read();
         finished = done;
         if (value) {
-          const chunkText = decoder.decode(value);
-          const lines = chunkText
-            .split("\n")
-            .filter((l) => l.startsWith("data: "));
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop(); // keep last incomplete line in buffer
           for (const line of lines) {
-            try {
-              const payload = JSON.parse(line.replace("data: ", ""));
-              if (payload.token) {
-                streamedResponse += payload.token;
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  if (updated.length > 0) {
-                    updated[updated.length - 1] = {
-                      sender: "assistant",
-                      content: streamedResponse,
-                    };
-                  }
-                  return updated;
-                });
-              } else if (payload.done) {
-                setConversationId(payload.conversationId);
-              }
-            } catch (e) {
-              // ignore partial payload chunks
-            }
+            processLine(line);
           }
         }
       }
+
+      // Flush remaining data in decoder and process remaining buffer
+      buffer += decoder.decode();
+      if (buffer.trim()) {
+        const remainingLines = buffer.split("\n");
+        for (const line of remainingLines) {
+          processLine(line);
+        }
+      }
+
+      // If finished but streamedResponse was empty, clean up the blank assistant bubble
+      if (!streamedResponse.trim()) {
+        setMessages((prev) => {
+          if (
+            prev.length > 0 &&
+            prev[prev.length - 1].sender === "assistant" &&
+            !prev[prev.length - 1].content
+          ) {
+            return prev.slice(0, -1);
+          }
+          return prev;
+        });
+      }
     } catch (err) {
-      console.error(err);
-      toast.error("Failed to stream response from assistant");
+      console.error("AI Stream Error:", err);
+      toast.error(err.message || "Failed to stream response from assistant");
+
+      // If an assistant bubble was added but had no text, remove the blank bubble
+      if (assistantBubbleAdded && !streamedResponse.trim()) {
+        setMessages((prev) => {
+          if (
+            prev.length > 0 &&
+            prev[prev.length - 1].sender === "assistant" &&
+            !prev[prev.length - 1].content
+          ) {
+            return prev.slice(0, -1);
+          }
+          return prev;
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -126,16 +203,25 @@ const AIAssistant = () => {
   };
 
   const clearChat = async () => {
-    if (conversationId) {
-      try {
-        await aiApi.delete(`/history/${conversationId}`);
-      } catch (err) {
-        console.error(err);
-      }
+    if (!conversationId) {
+      setMessages([]);
+      toast.success("Chat cleared");
+      return;
     }
-    setMessages([]);
-    setConversationId(null);
-    toast.success("Chat history cleared");
+
+    try {
+      await aiApi.delete(`/ai/history/${conversationId}`);
+      setMessages([]);
+      setConversationId(null);
+      toast.success("Chat history cleared");
+    } catch (err) {
+      console.error("Failed to delete chat history:", err);
+      const errorMessage =
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        "Failed to clear chat history";
+      toast.error(errorMessage);
+    }
   };
 
   if (isChecking) {

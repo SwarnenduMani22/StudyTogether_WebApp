@@ -12,13 +12,6 @@ export const getCoinPackages = async () => {
   return response.data;
 };
 
-export const purchaseCoins = async (packageId) => {
-  const response = await api.post("/coins/purchase", {
-    packageId,
-  });
-
-  return response.data;
-};
 export const createOrder = async (packageId) => {
   const response = await api.post("/payment/create-order", {
     packageId,

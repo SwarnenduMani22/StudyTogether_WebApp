@@ -92,7 +92,7 @@ class OllamaAIProvider extends AIProvider {
         };
       }
 
-      const host = process.env.OLLAMA_HOST || "http://localhost:11434";
+      const host = process.env.OLLAMA_HOST || process.env.OLLAMA_URL || process.env.OLLAMA_BASE_URL || "http://localhost:11434";
       const model = process.env.OLLAMA_MODEL || "mistral";
 
       // Query local Ollama service using fetchWithRetry from modelManager

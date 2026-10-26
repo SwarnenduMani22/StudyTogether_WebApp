@@ -32,6 +32,7 @@ const PaperDetails = () => {
   const [downloadLoading, setDownloadLoading] = useState(false);
   const [preview, setPreview] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewPdfUrl, setPreviewPdfUrl] = useState("");
 
   /* ================= FETCH PAPER ================= */
 
@@ -61,7 +62,7 @@ const PaperDetails = () => {
 
   /* ================= PDF URL ================= */
 
-  const pdfUrl = resolvePdfUrl(paper?.pdfLink);
+  const hasPdf = Boolean(paper?.hasPdf || paper?.pdfLink);
   const isAdmin = user?.role === "admin";
 
   const isOwner = paper?.uploadedBy?._id?.toString() === user?._id?.toString();
@@ -87,7 +88,7 @@ const PaperDetails = () => {
   /* ================= PREVIEW ================= */
 
   const handlePreview = async () => {
-    if (!pdfUrl) return;
+    if (!hasPdf) return;
 
     try {
       setPreviewLoading(true);
@@ -103,13 +104,18 @@ const PaperDetails = () => {
         });
       }
 
-      toast.success(
-        previewCost === "Free"
-          ? "Free preview opened"
-          : `10 coins used for preview`,
-      );
-
-      setPreview(true);
+      const authorizedUrl = resolvePdfUrl(response?.pdfLink) || (isOwner || isAdmin ? resolvePdfUrl(paper?.pdfLink) : "");
+      if (authorizedUrl) {
+        setPreviewPdfUrl(authorizedUrl);
+        toast.success(
+          previewCost === "Free"
+            ? "Free preview opened"
+            : `10 coins used for preview`,
+        );
+        setPreview(true);
+      } else {
+        toast.error("Unable to load preview URL");
+      }
     } catch (err) {
       console.error("View counter failed:", err);
 
@@ -125,7 +131,7 @@ const PaperDetails = () => {
   /* ================= DOWNLOAD ================= */
 
   const handleDownload = async () => {
-    if (!pdfUrl) return;
+    if (!hasPdf) return;
 
     try {
       setDownloadLoading(true);
@@ -140,13 +146,17 @@ const PaperDetails = () => {
         });
       }
 
-      toast.success(
-        downloadCost === "Free"
-          ? "Free download started"
-          : `${downloadCost.replace("-", "")} used`,
-      );
-
-      window.open(resolvePdfUrl(response?.pdfLink) || pdfUrl, "_blank");
+      const authorizedUrl = resolvePdfUrl(response?.pdfLink) || (alreadyDownloaded || isOwner || isAdmin ? resolvePdfUrl(paper?.pdfLink) : "");
+      if (authorizedUrl) {
+        toast.success(
+          downloadCost === "Free"
+            ? "Free download started"
+            : `${downloadCost.replace("-", "")} used`,
+        );
+        window.open(authorizedUrl, "_blank");
+      } else {
+        toast.error("Unable to load download URL");
+      }
     } catch (err) {
       console.error("Download counter failed:", err);
 
@@ -307,7 +317,7 @@ const PaperDetails = () => {
         <div className="flex gap-3">
           <button
             onClick={handlePreview}
-            disabled={previewLoading || !pdfUrl}
+            disabled={previewLoading || !hasPdf}
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded disabled:opacity-50"
           >
             {previewLoading ? "Loading..." : `Preview (${previewCost})`}
@@ -315,7 +325,7 @@ const PaperDetails = () => {
 
           <button
             onClick={handleDownload}
-            disabled={!pdfUrl || downloadLoading}
+            disabled={downloadLoading || !hasPdf}
             className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded disabled:opacity-50"
           >
             {downloadLoading ? "Downloading..." : `Download (${downloadCost})`}
@@ -410,8 +420,8 @@ const PaperDetails = () => {
 
       {/* ================= PDF MODAL ================= */}
 
-      {preview && (
-        <PDFModal pdfLink={pdfUrl} onClose={() => setPreview(false)} />
+      {preview && previewPdfUrl && (
+        <PDFModal pdfLink={previewPdfUrl} onClose={() => { setPreview(false); setPreviewPdfUrl(""); }} />
       )}
     </div>
   );

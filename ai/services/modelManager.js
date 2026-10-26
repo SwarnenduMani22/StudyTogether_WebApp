@@ -33,9 +33,14 @@ export const switchModel = (modelName) => {
   return { success: true, currentModel };
 };
 
+const getBaseOllamaUrl = () => {
+  const rawUrl = process.env.OLLAMA_URL || process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+  return rawUrl.replace(/\/+$/, "").replace(/\/api\/generate$/, "");
+};
+
 // Check if model is downloaded/installed locally in Ollama
 export const checkModelAvailability = async (modelName) => {
-  const ollamaUrl = process.env.OLLAMA_URL || "http://localhost:11434";
+  const ollamaUrl = getBaseOllamaUrl();
   try {
     const res = await fetchWithRetry(`${ollamaUrl}/api/tags`, { method: "GET" }, 2, 3000);
     const data = await res.json();
@@ -50,7 +55,7 @@ export const checkModelAvailability = async (modelName) => {
 
 // Validate Ollama local instance connection
 export const checkOllamaHealth = async () => {
-  const ollamaUrl = process.env.OLLAMA_URL || "http://localhost:11434";
+  const ollamaUrl = getBaseOllamaUrl();
   try {
     const res = await fetchWithRetry(ollamaUrl, { method: "GET" }, 2, 2000);
     return { success: true, status: "healthy", url: ollamaUrl };

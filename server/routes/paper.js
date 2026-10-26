@@ -7,7 +7,7 @@ import multer from "multer";
 
 import Paper from "../models/Paper.js";
 import User from "../models/User.js";
-import { addCoins, spendCoins } from "../utils/coinManager.js";
+import { addCoins, spendCoins, purchasePaperEntitlement } from "../utils/coinManager.js";
 import cloudinary from "../config/cloudinary.js";
 import verifyToken from "../middleware/authMiddleware.js";
 import verifyAdmin from "../middleware/adminMiddleware.js";
@@ -16,6 +16,14 @@ import { generateBadgesAndRank } from "../services/badgeService.js";
 import { logActivity } from "../services/activityService.js";
 // AI integration handled via REST API to AI module
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:5001";
+const getInternalAiHeaders = (hasJsonBody = false) => {
+  const headers = {};
+  if (hasJsonBody) headers["Content-Type"] = "application/json";
+  if (process.env.INTERNAL_SERVICE_KEY) {
+    headers["x-internal-service-key"] = process.env.INTERNAL_SERVICE_KEY;
+  }
+  return headers;
+};
 const router = express.Router();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -227,6 +235,7 @@ router.get("/", verifyToken, async (req, res) => {
     if (sort === "downloads") sortOption = { downloads: -1 };
 
     const papers = await Paper.find(filter)
+      .select("-pdfLink")
       .populate("uploadedBy", "name email")
       .lean()
       .skip(skip)
@@ -312,7 +321,7 @@ router.put("/admin/approve/:id", verifyToken, verifyAdmin, async (req, res) => {
     // Trigger PDF knowledge ingestion asynchronously via AI module API
     fetch(`${AI_SERVICE_URL}/api/v1/internal/ai/process`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getInternalAiHeaders(true),
       body: JSON.stringify({ paperId: paper._id }),
     }).catch((err) => console.error("Background ingestion error:", err));
 
@@ -351,6 +360,7 @@ router.delete("/admin/reject/:id", verifyToken, verifyAdmin, async (req, res) =>
     // Clean up processed knowledge chunks via AI module API
     fetch(`${AI_SERVICE_URL}/api/v1/internal/ai/knowledge/${id}`, {
       method: "DELETE",
+      headers: getInternalAiHeaders(false),
     }).catch((err) => console.error("Background delete ingestion error:", err));
 
     res.json({ success: true, message: "Paper rejected and deleted" });
@@ -384,7 +394,7 @@ router.post("/admin/bulk-approve", verifyToken, verifyAdmin, async (req, res) =>
       // Process PDF chunks asynchronously via AI module API
       fetch(`${AI_SERVICE_URL}/api/v1/internal/ai/process`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getInternalAiHeaders(true),
         body: JSON.stringify({ paperId: paper._id }),
       }).catch((err) => console.error("Bulk approved ingestion error:", err));
       approvedCount++;
@@ -414,6 +424,7 @@ router.post("/admin/bulk-reject", verifyToken, verifyAdmin, async (req, res) => 
       // Clean up chunks via AI module API
       fetch(`${AI_SERVICE_URL}/api/v1/internal/ai/knowledge/${paper._id}`, {
         method: "DELETE",
+        headers: getInternalAiHeaders(false),
       }).catch((err) => console.error("Bulk rejected delete ingestion error:", err));
       rejectedCount++;
     }
@@ -437,7 +448,7 @@ router.get("/:id/related", verifyToken, async (req, res) => {
         { subject: paper.subject },
         { semester: paper.semester }
       ]
-    }).limit(3).lean();
+    }).select("-pdfLink").limit(3).lean();
     res.json({ success: true, related });
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch related papers" });
@@ -484,6 +495,7 @@ router.get("/trending", verifyToken, async (req, res) => {
           "uploadedBy.password": 0,
           "uploadedBy.coinHistory": 0,
           "uploadedBy.bookmarks": 0,
+          pdfLink: 0,
         },
       },
     ]);
@@ -554,6 +566,18 @@ router.get("/:id", verifyToken, async (req, res) => {
       return res.status(404).json({ success: false, error: "Paper not found" });
     }
 
+    const isOwner = paper.uploadedBy?._id?.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === "admin";
+    let isFullAccess = isOwner || isAdmin;
+    if (!isFullAccess) {
+      const caller = await User.findById(req.user._id).select("downloadedPapers").lean();
+      isFullAccess = caller?.downloadedPapers?.some((p) => p.toString() === paper._id.toString());
+    }
+    paper.hasPdf = Boolean(paper.pdfLink);
+    if (!isFullAccess) {
+      delete paper.pdfLink;
+    }
+
     res.json({
       success: true,
       paper,
@@ -601,43 +625,55 @@ router.post("/:id/view", verifyToken, async (req, res, next) => {
       });
     }
 
-    /* ================= FREE ACCESS ================= */
+    /* ================= FREE ACCESS & ATOMIC PREVIEW ================= */
 
     const isAdmin = user.role === "admin";
-
     const isOwner = paper.uploadedBy.toString() === user._id.toString();
+    const alreadyDownloaded = user.downloadedPapers.some(
+      (id) => id.toString() === paper._id.toString()
+    );
+    const alreadyPreviewed = user.previewedPapers.some(
+      (id) => id.toString() === paper._id.toString()
+    );
 
-    if (!isAdmin && !isOwner) {
-      const alreadyPreviewed = user.previewedPapers.some(
-        (id) => id.toString() === paper._id.toString(),
-      );
+    let currentCoins = user.coins;
 
-      if (!alreadyPreviewed) {
-        if (user.coins < 10) {
+    if (!isAdmin && !isOwner && !alreadyDownloaded && !alreadyPreviewed) {
+      try {
+        const purchaseResult = await purchasePaperEntitlement({
+          userId: user._id,
+          paperId: paper._id,
+          entitlementType: "preview",
+          paperTitle: paper.title,
+        });
+        currentCoins = purchaseResult.coins;
+      } catch (err) {
+        if (err.message === "INSUFFICIENT_COINS" || err.code === "INSUFFICIENT_COINS") {
           return res.status(400).json({
             success: false,
             error: "Not enough coins for preview",
           });
         }
-
-        user.previewedPapers.push(paper._id);
-        await User.findByIdAndUpdate(user._id, { $addToSet: { previewedPapers: paper._id } });
-
-        await spendCoins(user, 10, "Preview Paper", paper._id, paper.title);
+        if (err.code === "IDEMPOTENCY_IN_PROGRESS") {
+          return res.status(409).json({
+            success: false,
+            error: err.message,
+          });
+        }
+        throw err;
       }
     }
 
-    const alreadyViewed = paper.viewedBy.some(id => id.toString() === user._id.toString());
-    if (!alreadyViewed) {
-      paper.viewedBy.push(user._id);
-      paper.views = paper.viewedBy.length;
-      await paper.save();
-    }
+    // Atomic update to paper view counter
+    Paper.findByIdAndUpdate(paper._id, {
+      $addToSet: { viewedBy: user._id },
+      $inc: { views: 1 },
+    }).catch((err) => console.error("Paper view counter update error:", err.message));
 
     res.json({
       success: true,
       message: "Preview unlocked",
-      coins: user.coins,
+      coins: currentCoins,
       pdfLink: paper.pdfLink,
     });
   } catch (error) {
@@ -678,53 +714,56 @@ router.post("/:id/download", verifyToken, async (req, res, next) => {
       });
     }
 
-    /* ================= FREE ACCESS ================= */
+    /* ================= FREE ACCESS & ATOMIC DOWNLOAD ================= */
 
     const isAdmin = user.role === "admin";
-
     const isOwner = paper.uploadedBy.toString() === user._id.toString();
+    const alreadyDownloaded = user.downloadedPapers.some(
+      (id) => id.toString() === paper._id.toString()
+    );
 
-    if (!isAdmin && !isOwner) {
-      const alreadyDownloaded = user.downloadedPapers.some(
-        (id) => id.toString() === paper._id.toString(),
-      );
+    let currentCoins = user.coins;
 
-      if (!alreadyDownloaded) {
-        const alreadyPreviewed = user.previewedPapers.some(
-          (id) => id.toString() === paper._id.toString(),
-        );
-
-        const requiredCoins = alreadyPreviewed ? 30 : 40;
-
-        if (user.coins < requiredCoins) {
+    if (!isAdmin && !isOwner && !alreadyDownloaded) {
+      try {
+        const purchaseResult = await purchasePaperEntitlement({
+          userId: user._id,
+          paperId: paper._id,
+          entitlementType: "download",
+          paperTitle: paper.title,
+        });
+        currentCoins = purchaseResult.coins;
+      } catch (err) {
+        if (err.message === "INSUFFICIENT_COINS" || err.code === "INSUFFICIENT_COINS") {
           return res.status(400).json({
             success: false,
             error: "Not enough coins for download",
           });
         }
-
-        user.downloadedPapers.push(paper._id);
-        await User.findByIdAndUpdate(user._id, { $addToSet: { downloadedPapers: paper._id } });
-
-        await spendCoins(
-          user,
-          requiredCoins,
-          "Download Paper",
-          paper._id,
-          paper.title,
-        );
+        if (err.code === "IDEMPOTENCY_IN_PROGRESS") {
+          return res.status(409).json({
+            success: false,
+            error: err.message,
+          });
+        }
+        throw err;
       }
     }
 
-    paper.downloads += 1;
+    // Atomic update to paper download counter
+    Paper.findByIdAndUpdate(paper._id, {
+      $inc: { downloads: 1 },
+    }).catch((err) => console.error("Paper download counter update error:", err.message));
 
-    await paper.save();
-    await generateBadgesAndRank(req.user._id);
+    // Non-fatal background badge calculation
+    generateBadgesAndRank(req.user._id).catch((err) =>
+      console.error("Badge generation background error:", err.message)
+    );
 
     res.json({
       success: true,
       message: "Download unlocked",
-      coins: user.coins,
+      coins: currentCoins,
       pdfLink: paper.pdfLink,
     });
   } catch (error) {
@@ -1089,7 +1128,18 @@ router.put("/:id", verifyToken, (req, res) => {
 
       // Trigger reprocess of PDF knowledge chunks if approved
       if (paper.status === "approved") {
-        reprocessPaper(paper).catch((err) => console.error("Background reprocess error:", err));
+        fetch(`${AI_SERVICE_URL}/api/v1/internal/ai/reprocess`, {
+          method: "POST",
+          headers: getInternalAiHeaders(true),
+          body: JSON.stringify({ paperId: paper._id }),
+        })
+          .then(async (aiRes) => {
+            if (!aiRes.ok) {
+              const errText = await aiRes.text().catch(() => "");
+              console.error(`Background reprocess failed [HTTP ${aiRes.status}]: ${errText}`);
+            }
+          })
+          .catch((err) => console.error("Background reprocess network error:", err.message));
       }
 
       if (updates.status && updates.status !== "draft" && paper.status !== "draft") {
@@ -1167,7 +1217,7 @@ router.delete("/:id", verifyToken, async (req, res) => {
     }
 
     /* ================= LOCAL DELETE (OPTIONAL) ================= */
-    if (paper.pdfLink.includes("/uploads/")) {
+    if (paper.pdfLink && paper.pdfLink.includes("/uploads/")) {
       try {
         const filename = paper.pdfLink.split("/uploads/")[1];
         if (filename) {
@@ -1184,7 +1234,17 @@ router.delete("/:id", verifyToken, async (req, res) => {
     await paper.deleteOne();
 
     // Clean up processed knowledge chunks
-    deletePaperKnowledge(id).catch((err) => console.error("Background delete ingestion error:", err));
+    fetch(`${AI_SERVICE_URL}/api/v1/internal/ai/knowledge/${id}`, {
+      method: "DELETE",
+      headers: getInternalAiHeaders(false),
+    })
+      .then(async (aiRes) => {
+        if (!aiRes.ok) {
+          const errText = await aiRes.text().catch(() => "");
+          console.error(`Background delete ingestion failed [HTTP ${aiRes.status}]: ${errText}`);
+        }
+      })
+      .catch((err) => console.error("Background delete ingestion network error:", err.message));
 
     res.json({
       success: true,
