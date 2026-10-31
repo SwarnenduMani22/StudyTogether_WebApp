@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, Mail, Lock, ArrowRight, BookOpen } from "lucide-react";
-//import { motion } from "framer-motion";
 
 import api from "../api/axios";
 import useAuth from "../hooks/useAuth";
