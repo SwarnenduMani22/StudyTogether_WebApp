@@ -9,7 +9,7 @@ import jwt from "jsonwebtoken";
 import Paper from "../models/Paper.js";
 import User from "../models/User.js";
 import { addCoins, spendCoins, purchasePaperEntitlement } from "../utils/coinManager.js";
-import cloudinary from "../config/cloudinary.js";
+import cloudinary, { getPublicId, deleteCloudinaryAsset } from "../config/cloudinary.js";
 import verifyToken from "../middleware/authMiddleware.js";
 import verifyAdmin from "../middleware/adminMiddleware.js";
 import upload from "../middleware/uploadCloudinary.js";
@@ -50,47 +50,6 @@ const normalizeSubject = (value = "") => {
   return SUBJECT_MAP[normalized] || value.trim();
 };
 
-/* ================= CLOUDINARY PUBLIC ID EXTRACT & CLEANUP ================= */
-
-const getPublicId = (url = "") => {
-  try {
-    if (!url || typeof url !== "string") return null;
-    if (!url.includes("res.cloudinary.com")) return null;
-
-    const match = url.match(/\/upload\/(?:v\d+\/)?(.+?)(?:\.[^/.]*)?$/);
-    if (match && match[1]) {
-      return match[1];
-    }
-
-    const parts = url.split("/");
-    const fileWithExt = parts.slice(-2).join("/"); // folder/file.pdf
-
-    return fileWithExt.replace(/\.[^/.]+$/, ""); // remove extension
-  } catch {
-    return null;
-  }
-};
-
-const deleteCloudinaryAsset = async (fileOrUrl) => {
-  try {
-    if (!fileOrUrl) return;
-
-    let publicId = null;
-    if (typeof fileOrUrl === "object") {
-      publicId = fileOrUrl?.filename || getPublicId(fileOrUrl?.path);
-    } else if (typeof fileOrUrl === "string") {
-      publicId = fileOrUrl.includes("res.cloudinary.com")
-        ? getPublicId(fileOrUrl)
-        : fileOrUrl.trim();
-    }
-
-    if (publicId) {
-      await cloudinary.uploader.destroy(publicId, { resource_type: "raw" });
-    }
-  } catch (err) {
-    console.error("Cloudinary orphan cleanup error:", err.message);
-  }
-};
 
 /* ================= BADGE SYSTEM ================= */
 // Badge logic moved to services/badgeService.js

@@ -9,20 +9,9 @@ import Paper from "../models/Paper.js";
 import Activity from "../models/Activity.js";
 import Transaction from "../models/Transaction.js";
 import { calculateUserRank } from "../services/rankService.js";
-import cloudinary from "../config/cloudinary.js";
+import { deleteCloudinaryAsset } from "../config/cloudinary.js";
 
 const router = express.Router();
-
-const getPublicId = (url = "") => {
-  try {
-    if (!url.includes("res.cloudinary.com")) return null;
-    const parts = url.split("/");
-    const fileWithExt = parts.slice(-2).join("/");
-    return fileWithExt.replace(/\.[^/.]+$/, "");
-  } catch {
-    return null;
-  }
-};
 
 /* =================================================
 BOOKMARK PAPER (SAFE TOGGLE)
@@ -315,13 +304,8 @@ router.delete("/delete", verifyToken, async (req, res) => {
 
     // Delete PDFs from Cloudinary
     for (const paper of userPapers) {
-      const publicId = getPublicId(paper.pdfLink);
-      if (publicId) {
-        try {
-          await cloudinary.uploader.destroy(publicId, { resource_type: "raw" });
-        } catch (err) {
-          console.error("Cloudinary delete error:", err.message);
-        }
+      if (paper.pdfLink) {
+        await deleteCloudinaryAsset(paper.pdfLink);
       }
     }
 
