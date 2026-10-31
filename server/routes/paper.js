@@ -15,6 +15,7 @@ import verifyAdmin from "../middleware/adminMiddleware.js";
 import upload from "../middleware/uploadCloudinary.js";
 import { generateBadgesAndRank } from "../services/badgeService.js";
 import { logActivity } from "../services/activityService.js";
+import { escapeRegex } from "../utils/regex.js";
 // AI integration handled via REST API to AI module
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://localhost:5001";
 const getInternalAiHeaders = (hasJsonBody = false) => {
@@ -42,8 +43,6 @@ const SUBJECT_MAP = {
 
 const VALID_SUBJECTS = new Set(Object.values(SUBJECT_MAP));
 
-const escapeRegex = (value = "") =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const normalizeSubject = (value = "") => {
   const normalized = value.trim().toLowerCase();

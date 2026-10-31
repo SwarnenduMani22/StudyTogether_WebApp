@@ -9,10 +9,8 @@ import Paper from "../models/Paper.js";
 import Transaction from "../models/Transaction.js";
 import PlatformKnowledge from "../models/PlatformKnowledge.js";
 import { grantCoins } from "../utils/coinManager.js";
+import { escapeRegex } from "../utils/regex.js";
 const router = express.Router();
-
-const escapeRegex = (value = "") =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /* =====================================================
 GET ALL USERS (ADMIN)
