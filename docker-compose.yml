@@ -15,18 +15,63 @@ services:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET must be set}
       - INTERNAL_SERVICE_KEY=${INTERNAL_SERVICE_KEY:?INTERNAL_SERVICE_KEY must be set}
-      - OLLAMA_URL=http://ollama:11434
-      - AI_PROVIDER=ollama
-      - OLLAMA_MODEL=mistral
+      - AI_SERVICE_URL=http://ai:5001
+      - CLIENT_URL=${CLIENT_URL:-http://localhost:5173}
+      - CLOUD_NAME=${CLOUD_NAME:-}
+      - API_KEY=${API_KEY:-}
+      - API_SECRET=${API_SECRET:-}
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:-}
+      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET:-}
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+    restart: always
+
+  ai:
+    build:
+      context: ./ai
+      dockerfile: Dockerfile
+    container_name: studytogether-ai
+    ports:
+      - "5001:5001"
+    environment:
+      - NODE_ENV=production
+      - AI_PORT=5001
+      - MONGODB_URI=${MONGODB_URI:-mongodb://mongodb:27017/studytogether}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
+      - INTERNAL_SERVICE_KEY=${INTERNAL_SERVICE_KEY:?INTERNAL_SERVICE_KEY must be set}
+      - OLLAMA_URL=http://ollama:11434
+      - AI_PROVIDER=${AI_PROVIDER:-ollama}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-mistral}
+      - CORS_ORIGIN=${CLIENT_URL:-http://localhost:5173}
+      - CLOUD_NAME=${CLOUD_NAME:-}
+      - API_KEY=${API_KEY:-}
+      - API_SECRET=${API_SECRET:-}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:5001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      ollama:
+        condition: service_started
     restart: always
 
   mongodb:
     image: mongo:6.0
     container_name: studytogether-db
-    ports:
-      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     volumes:
       - mongo-data:/data/db
     restart: always

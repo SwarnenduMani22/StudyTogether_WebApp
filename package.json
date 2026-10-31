@@ -6,6 +6,7 @@
     "server": "npm run dev --prefix server",
     "client": "npm run dev --prefix client",
     "ai": "node ai/server.js",
+    "ai:dev": "npm run dev --prefix ai",
     "dev:all": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\" \"node ai/server.js\"",
     "test": "node --test \"server/test/**/*.test.js\" \"ai/test/**/*.test.js\""
   },
