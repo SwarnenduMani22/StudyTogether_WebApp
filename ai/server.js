@@ -39,7 +39,27 @@ app.use(
 );
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
-//app.use(mongoSanitize());
+
+// Sanitize request data to prevent MongoDB operator injection (SEC-012)
+// In Express 5, req.query is a getter without a setter; sanitize req.query and define an own property on req.
+app.use((req, res, next) => {
+  if (req.body) {
+    mongoSanitize.sanitize(req.body);
+  }
+  if (req.params) {
+    mongoSanitize.sanitize(req.params);
+  }
+  if (req.query) {
+    const cleanQuery = mongoSanitize.sanitize(req.query);
+    Object.defineProperty(req, "query", {
+      value: cleanQuery,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+  next();
+});
 
 if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));

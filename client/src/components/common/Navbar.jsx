@@ -60,10 +60,14 @@ export default function Navbar() {
 
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
-  useEffect(() => {
+
+  const [prevPathname, setPrevPathname] = useState(location.pathname);
+  if (prevPathname !== location.pathname) {
+    setPrevPathname(location.pathname);
     setOpen(false);
     setMobileMenu(false);
-  }, [location.pathname]);
+  }
+
   const hideDashboardLink = ["/login", "/register"].includes(location.pathname);
 
   return (

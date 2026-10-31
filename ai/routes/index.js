@@ -26,8 +26,10 @@ import {
 } from "../services/learningService.js";
 import AICopilotProfile from "../models/AICopilotProfile.js";
 import Paper from "../models/Paper.js";
+import User from "../models/User.js";
 import AIFeedback from "../models/AIFeedback.js";
 import AIChatChunk from "../models/AIChatChunk.js";
+import mongoose from "mongoose";
 import {
   switchModel,
   getCurrentModel,
@@ -55,6 +57,56 @@ router.use((req, res, next) => {
 });
 
 /* =================================================
+PAPER ENTITLEMENT & PAYWALL VERIFICATION (SEC-009)
+================================================= */
+
+export const checkPaperEntitlement = async (userId, userRole, paperId) => {
+  if (!paperId || !mongoose.Types.ObjectId.isValid(paperId)) {
+    return { isEntitled: false, status: 400, error: "Invalid paper ID" };
+  }
+
+  const paper = await Paper.findOne({
+    _id: paperId,
+    isActive: true,
+    status: "approved",
+  });
+
+  if (!paper) {
+    return { isEntitled: false, status: 404, error: "Paper not found or not approved" };
+  }
+
+  if (userRole === "admin") {
+    return { isEntitled: true, paper };
+  }
+
+  if (paper.uploadedBy && paper.uploadedBy.toString() === userId?.toString()) {
+    return { isEntitled: true, paper };
+  }
+
+  const user = await User.findById(userId).select("previewedPapers downloadedPapers");
+  if (!user) {
+    return { isEntitled: false, status: 401, error: "User not found" };
+  }
+
+  const alreadyPreviewed = user.previewedPapers?.some(
+    (id) => id.toString() === paperId.toString()
+  );
+  const alreadyDownloaded = user.downloadedPapers?.some(
+    (id) => id.toString() === paperId.toString()
+  );
+
+  if (alreadyPreviewed || alreadyDownloaded) {
+    return { isEntitled: true, paper };
+  }
+
+  return {
+    isEntitled: false,
+    status: 403,
+    error: "Access denied. You must preview or download this paper to unlock AI learning tools for it.",
+  };
+};
+
+/* =================================================
 CONVERSATION INITIALIZATION
 ================================================= */
 
@@ -68,6 +120,19 @@ const handleConversationInit = async (req, res) => {
         success: false,
         error: "Valid domain is required",
       });
+    }
+
+    if (domain === "study" && paperId) {
+      const entitlement = await checkPaperEntitlement(
+        req.user._id,
+        req.user.role,
+        paperId
+      );
+      if (!entitlement.isEntitled) {
+        return res
+          .status(entitlement.status)
+          .json({ success: false, error: entitlement.error });
+      }
     }
 
     const session = await AIChatSession.create({
@@ -115,6 +180,20 @@ router.post("/chat", verifyToken, async (req, res) => {
         _id: conversationId,
         user: req.user._id,
       });
+    }
+
+    const effectivePaperId = paperId || session?.paper;
+    if (effectivePaperId) {
+      const entitlement = await checkPaperEntitlement(
+        req.user._id,
+        req.user.role,
+        effectivePaperId
+      );
+      if (!entitlement.isEntitled) {
+        return res
+          .status(entitlement.status)
+          .json({ success: false, error: entitlement.error });
+      }
     }
 
     // Fallback: create session if not specified
@@ -212,6 +291,20 @@ router.post("/chat/stream", verifyToken, async (req, res) => {
         _id: conversationId,
         user: req.user._id,
       });
+    }
+
+    const effectivePaperId = paperId || session?.paper;
+    if (effectivePaperId) {
+      const entitlement = await checkPaperEntitlement(
+        req.user._id,
+        req.user.role,
+        effectivePaperId
+      );
+      if (!entitlement.isEntitled) {
+        return res
+          .status(entitlement.status)
+          .json({ success: false, error: entitlement.error });
+      }
     }
     if (!session) {
       session = await AIChatSession.create({
@@ -513,6 +606,18 @@ router.post("/study-notes", verifyToken, async (req, res) => {
       return res
         .status(400)
         .json({ success: false, error: "paperId and topic required" });
+
+    const entitlement = await checkPaperEntitlement(
+      req.user._id,
+      req.user.role,
+      paperId
+    );
+    if (!entitlement.isEntitled) {
+      return res
+        .status(entitlement.status)
+        .json({ success: false, error: entitlement.error });
+    }
+
     const notes = await generateStudyNotes(paperId, topic);
     res.json({ success: true, notes });
   } catch (error) {
@@ -533,6 +638,18 @@ router.post("/quiz", verifyToken, async (req, res) => {
       return res
         .status(400)
         .json({ success: false, error: "paperId required" });
+
+    const entitlement = await checkPaperEntitlement(
+      req.user._id,
+      req.user.role,
+      paperId
+    );
+    if (!entitlement.isEntitled) {
+      return res
+        .status(entitlement.status)
+        .json({ success: false, error: entitlement.error });
+    }
+
     const quiz = await generateQuiz(paperId, type || "mcq", count || 5);
     res.json({ success: true, quiz });
   } catch (error) {
@@ -551,6 +668,18 @@ router.post("/flashcards", verifyToken, async (req, res) => {
       return res
         .status(400)
         .json({ success: false, error: "paperId required" });
+
+    const entitlement = await checkPaperEntitlement(
+      req.user._id,
+      req.user.role,
+      paperId
+    );
+    if (!entitlement.isEntitled) {
+      return res
+        .status(entitlement.status)
+        .json({ success: false, error: entitlement.error });
+    }
+
     const flashcards = await generateFlashcards(paperId);
     res.json({ success: true, flashcards });
   } catch (error) {
@@ -571,6 +700,18 @@ router.post("/exam-plan", verifyToken, async (req, res) => {
       return res
         .status(400)
         .json({ success: false, error: "paperId required" });
+
+    const entitlement = await checkPaperEntitlement(
+      req.user._id,
+      req.user.role,
+      paperId
+    );
+    if (!entitlement.isEntitled) {
+      return res
+        .status(entitlement.status)
+        .json({ success: false, error: entitlement.error });
+    }
+
     const plan = await generateExamPlan(
       paperId,
       timeAvailable || "2 hours",
@@ -595,6 +736,18 @@ router.post("/topic-analysis", verifyToken, async (req, res) => {
       return res
         .status(400)
         .json({ success: false, error: "paperId required" });
+
+    const entitlement = await checkPaperEntitlement(
+      req.user._id,
+      req.user.role,
+      paperId
+    );
+    if (!entitlement.isEntitled) {
+      return res
+        .status(entitlement.status)
+        .json({ success: false, error: entitlement.error });
+    }
+
     const analysis = await analyzeTopics(paperId);
     res.json({ success: true, analysis });
   } catch (error) {
@@ -849,18 +1002,45 @@ router.get("/health", async (req, res) => {
 AI STUDY KNOWLEDGE METADATA API
 ================================================= */
 
-// Get All Study Knowledge Chunks
+export const escapeRegex = (value = "") => {
+  if (typeof value !== "string") return "";
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+};
+
+// Get All Study Knowledge Chunks (SEC-010 Scoped & Entitled)
 router.get("/study-knowledge", verifyToken, async (req, res) => {
   try {
-    const { subject, semester, university } = req.query;
+    const { paperId, subject, semester, university } = req.query;
+
+    if (!paperId && req.user.role !== "admin") {
+      return res.status(400).json({
+        success: false,
+        error: "paperId query parameter is required to retrieve study knowledge",
+      });
+    }
+
     const filter = {};
+    if (paperId) {
+      const entitlement = await checkPaperEntitlement(
+        req.user._id,
+        req.user.role,
+        paperId,
+      );
+      if (!entitlement.isEntitled) {
+        return res
+          .status(entitlement.status || 403)
+          .json({ success: false, error: entitlement.error });
+      }
+      filter.paperId = paperId;
+    }
+
     if (subject) filter.subject = subject;
     if (semester) filter.semester = Number(semester);
     if (university) filter.university = university;
 
     const chunks = await AIChatChunk.find(filter)
       .limit(50)
-      .select("-embedding");
+      .select("-embedding -embeddingVersion -metadata -__v");
     res.json({ success: true, count: chunks.length, chunks });
   } catch (error) {
     console.error("❌ AI Study Knowledge fetch error:", error);
@@ -870,21 +1050,63 @@ router.get("/study-knowledge", verifyToken, async (req, res) => {
   }
 });
 
-// Search Study Knowledge Chunks
+// Search Study Knowledge Chunks (SEC-010 Scoped & Entitled, SEC-011 Regex Sanitized)
 router.get("/study-knowledge/search", verifyToken, async (req, res) => {
   try {
-    const { q, subject, semester, university } = req.query;
+    const { paperId, q, subject, semester, university } = req.query;
+
+    if (!paperId && req.user.role !== "admin") {
+      return res.status(400).json({
+        success: false,
+        error: "paperId query parameter is required to search study knowledge",
+      });
+    }
+
+    if (q === undefined || q === null || typeof q !== "string") {
+      return res.status(400).json({
+        success: false,
+        error: "Search query 'q' must be a valid non-empty string",
+      });
+    }
+
+    const trimmedQuery = q.trim();
+    if (!trimmedQuery) {
+      return res.status(400).json({
+        success: false,
+        error: "Search query 'q' cannot be empty",
+      });
+    }
+
+    if (trimmedQuery.length > 200) {
+      return res.status(400).json({
+        success: false,
+        error: "Search query 'q' exceeds maximum length of 200 characters",
+      });
+    }
+
     const filter = {};
+    if (paperId) {
+      const entitlement = await checkPaperEntitlement(
+        req.user._id,
+        req.user.role,
+        paperId,
+      );
+      if (!entitlement.isEntitled) {
+        return res
+          .status(entitlement.status || 403)
+          .json({ success: false, error: entitlement.error });
+      }
+      filter.paperId = paperId;
+    }
+
     if (subject) filter.subject = subject;
     if (semester) filter.semester = Number(semester);
     if (university) filter.university = university;
-    if (q) {
-      filter.chunkText = { $regex: q.trim(), $options: "i" };
-    }
+    filter.chunkText = { $regex: escapeRegex(trimmedQuery), $options: "i" };
 
     const chunks = await AIChatChunk.find(filter)
       .limit(30)
-      .select("-embedding");
+      .select("-embedding -embeddingVersion -metadata -__v");
     res.json({ success: true, count: chunks.length, chunks });
   } catch (error) {
     console.error("❌ AI Study Knowledge search error:", error);
@@ -916,16 +1138,37 @@ router.post(
   },
 );
 
-// Get Single Study Knowledge Chunk by ID
+// Get Single Study Knowledge Chunk by ID (SEC-010 Scoped & Entitled)
 router.get("/study-knowledge/:id", verifyToken, async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid study knowledge chunk ID",
+      });
+    }
+
     const chunk = await AIChatChunk.findById(req.params.id).select(
-      "-embedding",
+      "-embedding -embeddingVersion -metadata -__v",
     );
     if (!chunk)
       return res
         .status(404)
         .json({ success: false, error: "Study knowledge chunk not found" });
+
+    if (req.user.role !== "admin") {
+      const entitlement = await checkPaperEntitlement(
+        req.user._id,
+        req.user.role,
+        chunk.paperId,
+      );
+      if (!entitlement.isEntitled) {
+        return res
+          .status(entitlement.status || 403)
+          .json({ success: false, error: entitlement.error });
+      }
+    }
+
     res.json({ success: true, chunk });
   } catch (error) {
     console.error("❌ AI Study Knowledge get error:", error);

@@ -43,7 +43,7 @@ Following the interruption of the previous audit pass due to usage quotas, this 
 | **SEC-013** | CI/CD | Masked CI Test Failures & Missing Test Scripts | **[STILL OPEN - CONFIRMED IN CODE]** | `.github/workflows/ci.yml` (line 32) runs `npm test \|\| echo "Tests passed or ignored"`; `server/package.json` contains no `"test"` script. Real test failures are completely suppressed. |
 | **SEC-014** | DoS | Unbounded PDF Page Image Rendering in OCR | **[STILL OPEN - CONFIRMED IN CODE]** | `ai/services/ingestor.js` (lines 173-178): `pdfImgConvert.convert(..., { width: 1700, height: 2200, page_numbers: null })` renders all pages of large PDFs simultaneously at high resolution, creating severe OOM crash risks. |
 | **SEC-015** | Logic | Self-Rating Manipulation | **[STILL OPEN - CONFIRMED IN CODE]** | `server/routes/paper.js` (lines 800-833): Authors are not blocked from rating their own papers (`paper.uploadedBy === req.user._id`), allowing rating manipulation and artificial badge/rank increments. |
-| **P2-1 (QAL-01)** | Quality | Frontend Lint Errors | **[STILL OPEN - CONFIRMED IN CODE]** | `npm run lint` in `client` failed with 10 problems (6 errors, 4 warnings): undefined `setUser`/`setToken` in `client/src/api/auth.js`, setState inside effect in `Navbar.jsx`, `PDFViewer.jsx`, and `Papers.jsx`. |
+| **P2-1 (QAL-01)** | Quality | Frontend Lint Errors | **[VERIFIED - SOURCE & TEST]** | `npm run lint` in `client` passes with 0 errors and 0 warnings. `setUser`/`setToken` handled safely in `auth.js`, setState-in-effect and dependency issues resolved via React render-time adjustments and useMemo in `Navbar.jsx`, `PDFViewer.jsx`, and `Papers.jsx`. `npm run build` succeeds cleanly. |
 | **P2-2 (TST-01)** | Quality | Repository Automated Test Suite | **[STILL OPEN - CONFIRMED IN CODE]** | Automated test scripts exist only as temporary audit scripts in the scratch directory; no unified Jest/Mocha/Vitest test harness exists in `server/package.json` or `client/package.json`. |
 | **P3 (UX-01)** | UX | Draft Saving Blocked by Pending Limit | **[STILL OPEN - CONFIRMED IN CODE]** | `server/routes/paper.js` (lines 105-121): Pending upload limit check rejects requests before inspecting if `status === "draft"`. |
 | **P3 (UX-02)** | UX | Trending Papers Endpoint Requires Auth | **[STILL OPEN - CONFIRMED IN CODE]** | `server/routes/paper.js` (line 460): `GET /trending` enforces `verifyToken`, preventing public landing page visitors from viewing popular papers. |
@@ -192,17 +192,16 @@ These findings from `AUDIT_REPORT.md` and current source verification were confi
 ### Phase C: Priority 2 — Quality & Reliability (To Be Implemented)
 
 #### P2-1: Fix Frontend Lint Errors (QAL-01)
-- **Status:** **STILL OPEN**
+- **Status:** **COMPLETE & VERIFIED**
 - **Test Command:** `npm run lint` in `client/`
-- **Current Outcome:** 10 problems (6 errors, 4 warnings)
-  1. `client/src/api/auth.js:57:40` — `'setUser' is not defined (no-undef)`
-  2. `client/src/api/auth.js:58:41` — `'setToken' is not defined (no-undef)`
-  3. `client/src/api/auth.js:59:11` — `Empty block statement (no-empty)`
-  4. `client/src/components/common/Navbar.jsx:64:5` — `Calling setState synchronously within an effect (react-hooks/set-state-in-effect)`
-  5. `client/src/components/papers/PDFViewer.jsx:25:5` — `Calling setState synchronously within an effect (react-hooks/set-state-in-effect)`
-  6. `client/src/pages/Papers.jsx:62:32` — `Calling setState synchronously within an effect (react-hooks/set-state-in-effect)`
-  7. Warnings in `CoinGrantModal.jsx`, `AIAssistant.jsx`, and `Papers.jsx`.
-- **Target:** 0 errors, 0 warnings on `npm run lint`.
+- **Verification Outcome:** 0 errors, 0 warnings (100% clean).
+  1. `client/src/api/auth.js`: Added formal optional parameters `(setUser, setToken)` to `logout`, preserving safe optional callback invocation, removing undefined variable references and empty catch blocks.
+  2. `client/src/components/admin/CoinGrantModal.jsx`: Removed unused dead code function `handleQuickAdd`.
+  3. `client/src/components/common/Navbar.jsx`: Migrated `location.pathname` menu reset from `useEffect` setState to React's official render-time state adjustment pattern (`prevPathname !== location.pathname`).
+  4. `client/src/components/papers/PDFViewer.jsx`: Migrated PDF viewer state reset from `useEffect` setState to render-time adjustment (`prevFile !== safeFile`), avoiding cascading renders and removing unused `useEffect`.
+  5. `client/src/pages/AIAssistant.jsx`: Replaced unused `catch (err)` and `catch (e)` with ES2019+ optional catch bindings `catch {`.
+  6. `client/src/pages/Papers.jsx`: Wrapped `papers` in `useMemo([data])` and transformed `suggestions` into a derived `useMemo` with `selectedSuggestion` state, eliminating both the cascading `set-state-in-effect` error and the unstable `papers` hook dependency warning.
+- **Production Build:** `npm run build` succeeds cleanly in `client/` with 2620 modules transformed in 31.55s.
 
 #### P2-2: Add Automated Test Suite & Repair CI (TST-01, CICD-01)
 - **Status:** **STILL OPEN**
@@ -234,9 +233,9 @@ These findings from `AUDIT_REPORT.md` and current source verification were confi
 | **Priority 0 (Critical Hotfixes)** | 3 | 3 (P0-1, P0-2, P0-3) | 0 |
 | **Priority 1 (Core & Security)** | 7 | 7 (P1-1 through P1-7) | 0 |
 | **Consolidated Security (SEC-006 to SEC-015)** | 9 | 0 | 9 (SEC-006, 008, 009, 010, 011, 012, 013, 014, 015) |
-| **Priority 2 (Quality & CI)** | 2 | 0 | 2 (P2-1 lint, P2-2 CI/tests) |
+| **Priority 2 (Quality & CI)** | 2 | 1 (P2-1) | 1 (P2-2 CI/tests) |
 | **Priority 3 (UX & Docs)** | 5 | 0 | 5 (UX-01, UX-02, DOC-01, CLN-01, AI-UI-01) |
-| **TOTALS** | **26** | **10** | **16** |
+| **TOTALS** | **26** | **11** | **15** |
 
 ---
 

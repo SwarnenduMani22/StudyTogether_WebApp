@@ -45,18 +45,19 @@ export const loginUser = async (credentials) => {
 
 /* ================= LOGOUT ================= */
 
-export const logout = async () => {
+export const logout = async (setUser, setToken) => {
   try {
     await api.post("/auth/logout"); // 🔥 backend call
   } catch (error) {
     console.error("Logout API error:", error);
   }
 
-  // 🔥 FIXED: avoid crash if not defined
-  try {
-    if (typeof setUser === "function") setUser(null);
-    if (typeof setToken === "function") setToken(null);
-  } catch {}
+  if (typeof setUser === "function") {
+    setUser(null);
+  }
+  if (typeof setToken === "function") {
+    setToken(null);
+  }
 
   localStorage.removeItem("user");
   localStorage.removeItem("accessToken");

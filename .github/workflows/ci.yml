@@ -19,7 +19,10 @@ jobs:
       with:
         node-version: 20
         cache: 'npm'
-        cache-dependency-path: './server/package-lock.json'
+        cache-dependency-path: |
+          ./server/package-lock.json
+          ./ai/package-lock.json
+          ./client/package-lock.json
 
     - name: Install Backend Dependencies
       run: |
@@ -29,4 +32,29 @@ jobs:
     - name: Run Backend Tests
       run: |
         cd server
-        npm test || echo "Tests passed or ignored"
+        npm test
+
+    - name: Install AI Dependencies
+      run: |
+        cd ai
+        npm ci
+
+    - name: Run AI Tests
+      run: |
+        cd ai
+        npm test
+
+    - name: Install Client Dependencies
+      run: |
+        cd client
+        npm ci
+
+    - name: Validate Client Lint
+      run: |
+        cd client
+        npm run lint
+
+    - name: Validate Client Production Build
+      run: |
+        cd client
+        npm run build

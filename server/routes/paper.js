@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import multer from "multer";
+import jwt from "jsonwebtoken";
 
 import Paper from "../models/Paper.js";
 import User from "../models/User.js";
@@ -49,6 +50,48 @@ const normalizeSubject = (value = "") => {
   return SUBJECT_MAP[normalized] || value.trim();
 };
 
+/* ================= CLOUDINARY PUBLIC ID EXTRACT & CLEANUP ================= */
+
+const getPublicId = (url = "") => {
+  try {
+    if (!url || typeof url !== "string") return null;
+    if (!url.includes("res.cloudinary.com")) return null;
+
+    const match = url.match(/\/upload\/(?:v\d+\/)?(.+?)(?:\.[^/.]*)?$/);
+    if (match && match[1]) {
+      return match[1];
+    }
+
+    const parts = url.split("/");
+    const fileWithExt = parts.slice(-2).join("/"); // folder/file.pdf
+
+    return fileWithExt.replace(/\.[^/.]+$/, ""); // remove extension
+  } catch {
+    return null;
+  }
+};
+
+const deleteCloudinaryAsset = async (fileOrUrl) => {
+  try {
+    if (!fileOrUrl) return;
+
+    let publicId = null;
+    if (typeof fileOrUrl === "object") {
+      publicId = fileOrUrl?.filename || getPublicId(fileOrUrl?.path);
+    } else if (typeof fileOrUrl === "string") {
+      publicId = fileOrUrl.includes("res.cloudinary.com")
+        ? getPublicId(fileOrUrl)
+        : fileOrUrl.trim();
+    }
+
+    if (publicId) {
+      await cloudinary.uploader.destroy(publicId, { resource_type: "raw" });
+    }
+  } catch (err) {
+    console.error("Cloudinary orphan cleanup error:", err.message);
+  }
+};
+
 /* ================= BADGE SYSTEM ================= */
 // Badge logic moved to services/badgeService.js
 
@@ -72,6 +115,8 @@ router.post("/upload", verifyToken, (req, res) => {
       });
     }
 
+    let paperSaved = false;
+
     try {
       let { title, subject, semester } = req.body;
       const semesterNumber = Number(semester);
@@ -81,12 +126,14 @@ router.post("/upload", verifyToken, (req, res) => {
         semesterNumber < 1 ||
         semesterNumber > 8
       ) {
+        if (req.file) await deleteCloudinaryAsset(req.file);
         return res.status(400).json({
           success: false,
           error: "Semester must be between 1 and 8",
         });
       }
       if (!title || !subject || !semester || !req.file) {
+        if (req.file) await deleteCloudinaryAsset(req.file);
         return res.status(400).json({
           success: false,
           error: "All fields and PDF file are required",
@@ -96,13 +143,20 @@ router.post("/upload", verifyToken, (req, res) => {
       subject = normalizeSubject(subject);
 
       if (!VALID_SUBJECTS.has(subject)) {
+        if (req.file) await deleteCloudinaryAsset(req.file);
         return res.status(400).json({
           success: false,
           error: "Invalid subject",
         });
       }
 
-      if (req.user.role !== "admin") {
+      // Check draft intent before evaluating pending-upload limit
+      const isDraft =
+        req.body.isDraft === true ||
+        req.body.isDraft === "true" ||
+        req.body.status === "draft";
+
+      if (req.user.role !== "admin" && !isDraft) {
         // ✅ count ONLY pending
         const pendingUploads = await Paper.countDocuments({
           uploadedBy: req.user._id,
@@ -113,6 +167,7 @@ router.post("/upload", verifyToken, (req, res) => {
         const remainingSlots = 2 - pendingUploads;
 
         if (remainingSlots <= 0) {
+          if (req.file) await deleteCloudinaryAsset(req.file);
           return res.status(400).json({
             success: false,
             error: "Upload limit reached (Max 2 pending papers allowed)",
@@ -130,13 +185,13 @@ router.post("/upload", verifyToken, (req, res) => {
       });
 
       if (existingPaper) {
+        if (req.file) await deleteCloudinaryAsset(req.file);
         return res.status(400).json({
           success: false,
           error: "This paper already exists",
         });
       }
       const pdfLink = req.file.path.replace("/image/upload/", "/raw/upload/");
-      const isDraft = req.body.isDraft === 'true' || req.body.isDraft === true;
       const status = req.user.role === "admin" ? "approved" : (isDraft ? "draft" : "pending");
 
       const paper = await Paper.create({
@@ -147,7 +202,15 @@ router.post("/upload", verifyToken, (req, res) => {
         uploadedBy: req.user._id,
         status,
       });
-      await generateBadgesAndRank(req.user._id);
+      paperSaved = true;
+
+      if (status !== "draft") {
+        try {
+          await generateBadgesAndRank(req.user._id);
+        } catch (badgeErr) {
+          console.error("Badge generation error:", badgeErr.message);
+        }
+      }
 
       res.status(201).json({
         success: true,
@@ -160,6 +223,10 @@ router.post("/upload", verifyToken, (req, res) => {
         paper,
       });
     } catch (error) {
+      if (req.file && !paperSaved) {
+        await deleteCloudinaryAsset(req.file);
+      }
+
       if (error?.code === 11000) {
         return res.status(400).json({
           success: false,
@@ -175,21 +242,6 @@ router.post("/upload", verifyToken, (req, res) => {
     }
   });
 });
-
-/* ================= CLOUDINARY PUBLIC ID EXTRACT ================= */
-
-const getPublicId = (url = "") => {
-  try {
-    if (!url.includes("res.cloudinary.com")) return null;
-
-    const parts = url.split("/");
-    const fileWithExt = parts.slice(-2).join("/"); // folder/file.pdf
-
-    return fileWithExt.replace(/\.[^/.]+$/, ""); // remove extension
-  } catch {
-    return null;
-  }
-};
 
 /* =====================================================
 GET PAPERS
@@ -456,10 +508,51 @@ router.get("/:id/related", verifyToken, async (req, res) => {
 });
 
 /* =====================================================
+OPTIONAL AUTH MIDDLEWARE
+===================================================== */
+
+const optionalAuth = async (req, res, next) => {
+  req.user = null;
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return next();
+  }
+
+  const token = authHeader.split(" ")[1];
+  if (!token) {
+    return next();
+  }
+
+  const JWT_SECRET = process.env.JWT_SECRET;
+  if (!JWT_SECRET) {
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (!decoded?.id) {
+      return next();
+    }
+
+    const user = await User.findById(decoded.id)
+      .select("_id name email role isActive status")
+      .lean();
+
+    if (user && user.isActive !== false && user.status !== "disabled") {
+      req.user = user;
+    }
+  } catch {
+    req.user = null;
+  }
+
+  next();
+};
+
+/* =====================================================
 TRENDING
 ===================================================== */
 
-router.get("/trending", verifyToken, async (req, res) => {
+router.get("/trending", optionalAuth, async (req, res) => {
   try {
     const papers = await Paper.aggregate([
       { $match: { isActive: true, status: "approved" } },
@@ -492,10 +585,18 @@ router.get("/trending", verifyToken, async (req, res) => {
       { $unwind: "$uploadedBy" },
       {
         $project: {
-          "uploadedBy.password": 0,
-          "uploadedBy.coinHistory": 0,
-          "uploadedBy.bookmarks": 0,
-          pdfLink: 0,
+          _id: 1,
+          title: 1,
+          subject: 1,
+          semester: 1,
+          views: 1,
+          downloads: 1,
+          averageRating: 1,
+          popularityScore: 1,
+          status: 1,
+          createdAt: 1,
+          "uploadedBy._id": 1,
+          "uploadedBy.name": 1,
         },
       },
     ]);
@@ -811,6 +912,20 @@ router.post("/:id/rate", verifyToken, async (req, res) => {
       });
     }
 
+    const uploaderId = paper.uploadedBy?._id
+      ? paper.uploadedBy._id.toString()
+      : paper.uploadedBy?.toString();
+    const userId = req.user?._id
+      ? req.user._id.toString()
+      : req.user?.id?.toString();
+
+    if (uploaderId && userId && uploaderId === userId) {
+      return res.status(403).json({
+        success: false,
+        error: "Authors cannot rate their own papers",
+      });
+    }
+
     const existing = paper.ratings.find(
       (r) => r.user.toString() === req.user._id.toString(),
     );
@@ -993,10 +1108,13 @@ router.put("/:id", verifyToken, (req, res) => {
       });
     }
 
+    let paperSaved = false;
+
     try {
       const { id } = req.params;
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
+        if (req.file) await deleteCloudinaryAsset(req.file);
         return res.status(400).json({ success: false, error: "Invalid paper id" });
       }
 
@@ -1006,12 +1124,14 @@ router.put("/:id", verifyToken, (req, res) => {
       });
 
       if (!paper) {
+        if (req.file) await deleteCloudinaryAsset(req.file);
         return res.status(404).json({ success: false, error: "Paper not found" });
       }
 
       const isOwner = paper.uploadedBy.toString() === req.user._id.toString();
 
       if (!isOwner && req.user.role !== "admin") {
+        if (req.file) await deleteCloudinaryAsset(req.file);
         return res.status(403).json({ success: false, error: "Not allowed to edit this paper" });
       }
 
@@ -1021,12 +1141,7 @@ router.put("/:id", verifyToken, (req, res) => {
         const nextTitle = req.body.title.trim();
 
         if (nextTitle.length < 3 || nextTitle.length > 200) {
-          if (req.file) {
-            const newPublicId = getPublicId(req.file.path);
-            if (newPublicId) {
-              await cloudinary.uploader.destroy(newPublicId, { resource_type: "raw" }).catch(e => console.error(e));
-            }
-          }
+          if (req.file) await deleteCloudinaryAsset(req.file);
           return res
             .status(400)
             .json({ success: false, error: "Title must be 3-200 characters" });
@@ -1039,12 +1154,7 @@ router.put("/:id", verifyToken, (req, res) => {
         const nextSubject = normalizeSubject(req.body.subject);
 
         if (!VALID_SUBJECTS.has(nextSubject)) {
-          if (req.file) {
-            const newPublicId = getPublicId(req.file.path);
-            if (newPublicId) {
-              await cloudinary.uploader.destroy(newPublicId, { resource_type: "raw" }).catch(e => console.error(e));
-            }
-          }
+          if (req.file) await deleteCloudinaryAsset(req.file);
           return res.status(400).json({
             success: false,
             error: "Invalid subject",
@@ -1062,12 +1172,7 @@ router.put("/:id", verifyToken, (req, res) => {
           nextSemester < 1 ||
           nextSemester > 8
         ) {
-          if (req.file) {
-            const newPublicId = getPublicId(req.file.path);
-            if (newPublicId) {
-              await cloudinary.uploader.destroy(newPublicId, { resource_type: "raw" }).catch(e => console.error(e));
-            }
-          }
+          if (req.file) await deleteCloudinaryAsset(req.file);
           return res
             .status(400)
             .json({ success: false, error: "Semester must be between 1 and 8" });
@@ -1093,6 +1198,30 @@ router.put("/:id", verifyToken, (req, res) => {
 
       if (req.body.status && req.user.role === "admin") {
         updates.status = req.body.status;
+      } else if (
+        req.body.status === "pending" &&
+        paper.status === "draft" &&
+        req.user.role !== "admin"
+      ) {
+        updates.status = "pending";
+      }
+
+      if (updates.status === "pending" && req.user.role !== "admin") {
+        const pendingUploads = await Paper.countDocuments({
+          uploadedBy: req.user._id,
+          status: "pending",
+          _id: { $ne: paper._id },
+        });
+
+        const remainingSlots = 2 - pendingUploads;
+
+        if (remainingSlots <= 0) {
+          if (req.file) await deleteCloudinaryAsset(req.file);
+          return res.status(400).json({
+            success: false,
+            error: "Upload limit reached (Max 2 pending papers allowed)",
+          });
+        }
       }
 
       const finalTitle = updates.title || paper.title;
@@ -1107,24 +1236,20 @@ router.put("/:id", verifyToken, (req, res) => {
       });
 
       if (duplicate) {
-        if (req.file) {
-          const newPublicId = getPublicId(updates.pdfLink);
-          if (newPublicId) {
-            await cloudinary.uploader.destroy(newPublicId, { resource_type: "raw" }).catch(e => console.error(e));
-          }
-        }
+        if (req.file) await deleteCloudinaryAsset(req.file);
         return res.status(400).json({
           success: false,
           error: "Another paper with same title/subject/semester exists",
         });
       }
 
-      if (oldPublicId) {
-        await cloudinary.uploader.destroy(oldPublicId, { resource_type: "raw" }).catch(e => console.error(e));
-      }
-
       Object.assign(paper, updates);
       await paper.save();
+      paperSaved = true;
+
+      if (oldPublicId) {
+        await deleteCloudinaryAsset(oldPublicId);
+      }
 
       // Trigger reprocess of PDF knowledge chunks if approved
       if (paper.status === "approved") {
@@ -1143,7 +1268,11 @@ router.put("/:id", verifyToken, (req, res) => {
       }
 
       if (updates.status && updates.status !== "draft" && paper.status !== "draft") {
-        await generateBadgesAndRank(paper.uploadedBy);
+        try {
+          await generateBadgesAndRank(paper.uploadedBy);
+        } catch (badgeErr) {
+          console.error("Badge generation error in update:", badgeErr.message);
+        }
       }
 
       const updatedPaper = await Paper.findById(paper._id)
@@ -1156,11 +1285,8 @@ router.put("/:id", verifyToken, (req, res) => {
         paper: updatedPaper,
       });
     } catch (error) {
-      if (req.file && updates.pdfLink) {
-        const newPublicId = getPublicId(updates.pdfLink);
-        if (newPublicId) {
-          await cloudinary.uploader.destroy(newPublicId, { resource_type: "raw" }).catch(e => console.error(e));
-        }
+      if (req.file && !paperSaved) {
+        await deleteCloudinaryAsset(req.file);
       }
 
       if (error?.code === 11000) {
@@ -1259,4 +1385,5 @@ router.delete("/:id", verifyToken, async (req, res) => {
   }
 });
 
+export { getPublicId, deleteCloudinaryAsset };
 export default router;

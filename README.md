@@ -22,10 +22,10 @@ The platform incentivizes academic contribution through a custom **virtual econo
 3. [Tech Stack](#-tech-stack)
 4. [System Architecture Overview](#-system-architecture-overview)
 5. [Folder Structure](#-folder-structure)
-6. [Installation Guide](#-installation-guide)
-7. [Environment Variables](#-environment-variables)
+6. [Environment Variables](#-environment-variables)
+7. [Installation Guide](#-installation-guide)
 8. [Running the Project](#-running-the-project)
-9. [Build & Production Commands](#-build--production-commands)
+9. [Build, Test & Production Commands](#-build-test--production-commands)
 10. [User Roles & Permissions](#-user-roles--permissions)
 11. [Major Workflows](#-major-workflows)
 12. [Database Models Overview](#-database-models-overview)
@@ -68,7 +68,7 @@ StudyTogether incentivizes academic resource sharing. Students who upload high-q
 *   **React 19**: Core framework.
 *   **Vite**: Fast, module-based bundler.
 *   **Tailwind CSS**: Utility-first layouts.
-*   **React Router DOM v6**: Client-side routing.
+*   **React Router DOM v7**: Client-side routing (`^7.13.0`).
 *   **TanStack React Query**: Server state caching, background refetches, and infinite scroll pipelines.
 *   **React Infinite Scroll Component**: Handles paginated items lists.
 *   **Axios**: Custom instance configured with `withCredentials: true` and interceptors for silent token refreshes.
@@ -88,11 +88,15 @@ StudyTogether incentivizes academic resource sharing. Students who upload high-q
 
 ```mermaid
 graph TD
-    Client[React Client - Vite] <-->|HTTPS + HttpOnly Cookies| Server[Express Server - Node.js]
-    Server <-->|Mongoose Queries| MongoDB[(MongoDB Database)]
-    Server <-->|Upload / Delete Files| Cloudinary[Cloudinary PDF Storage]
-    Client <-->|Token Storage| LocalStorage[(Local Storage)]
-    Server <-->|Payment Verification| Razorpay[Razorpay Payment API]
+    Client["React Client (Vite :5173)"] <-->|"HTTPS + HttpOnly Cookies"| Server["Main Server (Express :5000)"]
+    Client <-->|"SSE / REST Chat"| AI["AI Microservice (Express :5001)"]
+    Server <-->|"INTERNAL_SERVICE_KEY"| AI
+    Server <-->|"Mongoose Queries"| MongoDB[("MongoDB Database")]
+    AI <-->|"Mongoose Queries"| MongoDB
+    Server <-->|"Upload / Delete Files"| Cloudinary["Cloudinary PDF Storage"]
+    AI <-->|"Local Embeddings & Inference"| Ollama["Ollama LLM (:11434)"]
+    Client <-->|"Token Storage"| LocalStorage[("Local Storage")]
+    Server <-->|"Payment Verification"| Razorpay["Razorpay Payment API"]
 ```
 
 ---
@@ -100,51 +104,70 @@ graph TD
 ## 📂 Folder Structure
 
 ```bash
-FINAL_YEAR/
-├── client/                      # React Frontend
+StudyTogether/
+├── client/                      # React Frontend (Vite, React 19, Tailwind)
 │   ├── src/
-│   │   ├── api/                 # Axios instance and endpoints functions
-│   │   ├── components/          # Reusable UI elements (Modal, Skeletons, Navbar)
+│   │   ├── api/                 # Axios & AI-Axios instances and API functions
+│   │   ├── components/          # Reusable UI elements (Modal, Skeletons, Navbar, PDFViewer)
 │   │   ├── context/             # AuthContext (state persistence & logout revocation)
 │   │   ├── hooks/               # Custom React hooks (useAuth)
-│   │   ├── pages/               # Page components (Leaderboard, Profile, Wallet, etc.)
+│   │   ├── pages/               # Page components (Papers, Leaderboard, Profile, Wallet, etc.)
 │   │   └── App.jsx              # Routing and route guard layouts
 │
-├── server/                      # Node.js/Express Backend
-│   ├── config/                  # Cloudinary and MongoDB connections
+├── server/                      # Node.js/Express Backend (Port 5000)
+│   ├── config/                  # Cloudinary, MongoDB, and root .env loader
 │   ├── middleware/              # Auth limits, file upload filters, NoSQL injection parsers
 │   ├── models/                  # Mongoose Schemas (User, Paper, Transaction, Activity)
 │   ├── routes/                  # API router controllers (auth, user, admin, paper, coin)
 │   ├── services/                # Rank, badge, activity logging workflows
-│   ├── utils/                   # Coin balance managers
+│   ├── utils/                   # Atomic coin balance managers & entitlement handlers
+│   ├── test/                    # Automated Node native test suites
 │   └── server.js                # Server entry-point
+│
+├── ai/                          # AI Copilot Microservice (Port 5001)
+│   ├── config/                  # Cloudinary & AI configuration
+│   ├── middleware/              # Service-to-service auth & internal keys
+│   ├── models/                  # StudyKnowledge Mongoose schema
+│   ├── routes/                  # AI endpoints (/api/v1/ai & /api/v1/internal/ai)
+│   ├── services/                # PDF text extraction, OCR, chunking, BM25 & semantic search
+│   ├── test/                    # AI microservice automated test suites
+│   └── server.js                # AI microservice entry-point
+│
+├── .env.example                 # Master environment variables template
+└── package.json                 # Root unified workspace runner & test script
 ```
 
 ---
 
 ## ⚙️ Environment Variables
 
-### Backend (`server/.env`)
-Create a `.env` file in the `server` directory:
+### Root Configuration (`.env`)
+Create a `.env` file in the project root (copied from `.env.example`). Both the Main Backend Server (`server/config/env.js`) and the AI Copilot Microservice (`ai/server.js`) resolve and load configuration from this root `.env` file:
 ```env
 PORT=5000
+NODE_ENV=development
+CLIENT_URL=http://localhost:5173
 MONGODB_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/studytogether
 JWT_SECRET=your_super_secret_jwt_access_key
 JWT_REFRESH_SECRET=your_super_secret_jwt_refresh_key
-CLIENT_URL=http://localhost:5173
+INTERNAL_SERVICE_KEY=your_internal_service_key_secret_here
+
 CLOUD_NAME=your_cloudinary_cloud_name
 API_KEY=your_cloudinary_api_key
 API_SECRET=your_cloudinary_api_secret
+
 RAZORPAY_KEY_ID=your_razorpay_key_id
 RAZORPAY_KEY_SECRET=your_razorpay_key_secret
 RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_secret
-NODE_ENV=development
 
-# AI Copilot Configs (Local Ollama LLM Runner)
+# AI Copilot Microservice Configs
+AI_PORT=5001
+AI_SERVICE_URL=http://localhost:5001
+CORS_ORIGIN=http://localhost:5173
 AI_PROVIDER=ollama
 OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=mistral
 EMBEDDING_MODEL=nomic-embed-text
-LLM_PROVIDER=ollama
 
 # RAG Chunking Parameters
 PDF_CHUNK_SIZE_WORDS=120
@@ -159,10 +182,11 @@ MAX_SESSION_MESSAGES=50
 SESSION_TTL_SECONDS=2592000
 ```
 
-### Frontend (`client/.env`)
-Create a `.env` file in the `client` directory:
+### Frontend (`client/.env` - Optional)
+Vite automatically defaults to `http://localhost:5000/api/v1` and `http://localhost:5001/api/v1`. To override:
 ```env
 VITE_API_URL=http://localhost:5000/api/v1
+VITE_AI_API_URL=http://localhost:5001/api/v1
 ```
 
 ---
@@ -173,54 +197,85 @@ VITE_API_URL=http://localhost:5000/api/v1
 *   Node.js installed (v18+ recommended)
 *   MongoDB Instance (Local or MongoDB Atlas)
 *   Cloudinary Account
+*   Ollama (optional, for local AI Copilot LLM & embeddings)
 
 ### 1. Clone the Project
 ```bash
-git clone https://github.com/SwarnenduMani22/FINAL_YEAR.git
-cd FINAL_YEAR
+git clone https://github.com/SwarnenduMani22/StudyTogether.git
+cd StudyTogether
 ```
 
-### 2. Configure Backend
+### 2. Configure Environment Variables
+Copy `.env.example` in the project root to `.env`:
 ```bash
-cd server
-npm install
-# Add your environment variables to .env
-npm run dev
+cp .env.example .env
 ```
+Fill in your database URL, JWT keys, and API credentials.
 
-### 3. Configure Frontend
+### 3. Install Dependencies
 ```bash
-cd ../client
+# Install root workspace dependencies
 npm install
-# Add your environment variables to .env
-npm run dev
+
+# Install backend dependencies
+cd server && npm install && cd ..
+
+# Install frontend dependencies
+cd client && npm install && cd ..
+
+# Install AI microservice dependencies
+cd ai && npm install && cd ..
 ```
 
 ---
 
 ## 💻 Running the Project
 
-*   **Backend Server**: Starts on `http://localhost:5000` (API endpoint root is `/api/v1`).
-*   **Frontend Client**: Starts on `http://localhost:5173`.
+### Option A: Full-Stack Mode (Concurrent All-in-One — Recommended)
+```bash
+npm run dev:all
+```
+This concurrently starts:
+*   **React Frontend**: `http://localhost:5173`
+*   **Main Backend Server**: `http://localhost:5000` (API endpoint root: `/api/v1`)
+*   **AI Copilot Microservice**: `http://localhost:5001` (API endpoint root: `/api/v1/ai`)
+
+### Option B: Standard Web Mode (Client + Main Server)
+```bash
+npm run dev
+```
+
+### Option C: Independent Terminal Processes
+*   **Backend Server**: `cd server && npm run dev` (starts on `http://localhost:5000`)
+*   **AI Microservice**: `npm run ai` or `cd ai && npm run dev` (starts on `http://localhost:5001`)
+*   **Frontend Client**: `cd client && npm run dev` (starts on `http://localhost:5173`)
 
 ---
 
-## 📦 Build & Production Commands
+## 📦 Build, Test & Production Commands
 
-### Backend Production Build
-Deploy Node.js files directly. Run:
+### Automated Test Execution
+Run all backend and AI microservice automated test suites:
 ```bash
-cd server
-npm start
+npm test
 ```
+The test suite executes all tests under `server/test/` and `ai/test/` using Node's native test runner (`node:test`).
 
-### Frontend Static Build
-Generate optimized production static files:
+### Frontend Lint & Production Build
 ```bash
 cd client
+# Run ESLint validation
+npm run lint
+# Generate optimized production static bundle in client/dist/
 npm run build
 ```
-Vite compiles assets into `client/dist/` for static hosting (Vercel, Netlify, etc.).
+
+### Backend Production Execution
+```bash
+cd server && npm start
+# For AI microservice:
+cd ai && npm start
+```
 
 ---
 
@@ -282,7 +337,7 @@ Vite compiles assets into `client/dist/` for static hosting (Vercel, Netlify, et
   bookmarks: [{ type: ObjectId, ref: "Paper" }],
   previewedPapers: [{ type: ObjectId, ref: "Paper" }],
   downloadedPapers: [{ type: ObjectId, ref: "Paper" }],
-  statusHistory: [{ status: String, reason: String, changedBy: ObjectId, changedAt: Date }],
+  statusHistory: [{ action: { type: String, enum: ["disabled", "enabled"] }, reason: String, performedBy: ObjectId, performedAt: Date }],
   appliedGrants: [{ idempotencyKey: String, amount: Number, appliedAt: Date }]
 }
 ```
@@ -296,6 +351,8 @@ Vite compiles assets into `client/dist/` for static hosting (Vercel, Netlify, et
   pdfLink: { type: String, required: true },
   uploadedBy: { type: ObjectId, ref: "User", required: true },
   status: { type: String, enum: ["draft", "pending", "approved"], default: "pending" },
+  isActive: { type: Boolean, default: true },
+  cloudinaryPublicId: { type: String, default: null },
   views: { type: Number, default: 0 },
   downloads: { type: Number, default: 0 },
   ratings: [{ user: { type: ObjectId, ref: "User" }, value: { type: Number, min: 1, max: 5 } }],
@@ -310,10 +367,13 @@ Vite compiles assets into `client/dist/` for static hosting (Vercel, Netlify, et
   amount: { type: Number, required: true },
   type: { type: String, enum: ["earned", "spent", "purchased", "refund", "bonus", "grant"], required: true },
   reason: { type: String, required: true },
+  performedBy: { type: ObjectId, ref: "User" },
   idempotencyKey: { type: String, sparse: true, unique: true },
   balanceApplied: { type: Boolean, default: false },
   status: { type: String, enum: ["pending", "completed", "failed"], default: "completed" },
-  metadata: { type: Schema.Types.Mixed, default: {} }
+  paperId: { type: ObjectId, ref: "Paper" },
+  paperTitle: { type: String },
+  createdAt: { type: Date, default: Date.now }
 }
 ```
 
@@ -321,8 +381,11 @@ Vite compiles assets into `client/dist/` for static hosting (Vercel, Netlify, et
 ```javascript
 {
   user: { type: ObjectId, ref: "User", required: true },
-  actionType: { type: String, enum: ["upload", "badge_earned", "rank_up", "reject", "bonus"], required: true },
-  details: { type: String, required: true }
+  actionType: { type: String, enum: ["upload", "rank_up", "badge_earned", "milestone"], required: true },
+  description: { type: String, required: true },
+  targetId: { type: ObjectId },
+  targetModel: { type: String, enum: ["Paper", "User"] },
+  createdAt: { type: Date, default: Date.now, expires: 2592000 }
 }
 ```
 
@@ -338,16 +401,20 @@ Vite compiles assets into `client/dist/` for static hosting (Vercel, Netlify, et
 
 ### Papers Router (`/api/v1/papers`)
 *   `GET /` — Paginated full-text search list (approved papers only).
-*   `POST /upload` — Upload paper (accepts pdf file, checks limits).
-*   `GET /:id` — Detailed paper metadata (populated uploader name).
+*   `GET /trending` — Public trending papers (top 5 by popularity; optional auth, strict data redaction).
+*   `POST /upload` — Upload paper (accepts pdf file, bypasses pending limit for drafts).
+*   `GET /top-papers` — Admin top 5 papers by views/downloads.
+*   `GET /:id` — Detailed paper metadata (populated uploader name; full access or preview).
 *   `PUT /:id` — Update paper details, replace PDF file, or publish draft.
 *   `DELETE /:id` — Authorized owner or admin delete paper (cascades).
 *   `GET /:id/related` — Get related papers based on semester/subject.
-*   `POST /:id/rate` — Rating submission.
+*   `POST /:id/rate` — Rating submission (author self-rating blocked).
 *   `POST /:id/comment` — Comment addition.
 *   `DELETE /:paperId/comment/:commentId` — Comment deletion.
-*   `POST /:id/view` — Preview paper (coin deduction).
-*   `POST /:id/download` — Download paper (coin deduction).
+*   `POST /:id/view` — Preview paper (10 coins deduction).
+*   `POST /:id/download` — Download paper (40 coins direct, 30 coins if previewed).
+*   `POST /admin/bulk-approve` — Admin bulk paper approval (+30 coins reward to authors).
+*   `POST /admin/bulk-reject` — Admin bulk paper rejection with Cloudinary cleanup.
 
 ### User Router (`/api/v1/users`)
 *   `GET /profile` — Retrieve personal session info & bookmarks.
@@ -370,7 +437,8 @@ Vite compiles assets into `client/dist/` for static hosting (Vercel, Netlify, et
 *   `POST /users/:id/refund` — Issue coin refund and log transaction.
 *   `GET /coin-analytics` — System-wide coin metrics.
 
-### AI Copilot Router (`/api/v1/ai`)
+### AI Copilot Router (AI Microservice: `http://localhost:5001/api/v1/ai`)
+*   `GET /health` — Service readiness & health check endpoint (`/health`).
 *   `GET /status` — AI system readiness, model information, chunk counts, and Ollama health check status.
 *   `POST /chat` — Send query to the AI Copilot.
 *   `POST /chat/stream` — Stream query response via SSE (Server-Sent Events) tokens.
@@ -382,6 +450,7 @@ Vite compiles assets into `client/dist/` for static hosting (Vercel, Netlify, et
 *   `POST /flashcards` — Generate study flashcards (Question/Front and Answer/Back).
 *   `POST /exam-plan` — Generate personalized strategic study plan.
 *   `POST /reindex` — Admin trigger vector index rebuild.
+*   `POST /api/v1/internal/ai/process`, `POST /api/v1/internal/ai/reprocess`, `DELETE /api/v1/internal/ai/knowledge/:id` — Internal routes protected by `INTERNAL_SERVICE_KEY`.
 
 ---
 

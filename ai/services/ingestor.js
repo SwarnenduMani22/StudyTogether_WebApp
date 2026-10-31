@@ -11,6 +11,27 @@ const CHUNK_OVERLAP_WORDS = parseInt(process.env.PDF_CHUNK_OVERLAP_WORDS || "20"
 // Minimum characters of extracted text before falling back to OCR stub
 const MIN_TEXT_LENGTH = 100;
 
+// Maximum OCR pages configuration (SEC-014)
+export const DEFAULT_MAX_OCR_PAGES = 10;
+export const HARD_CEILING_OCR_PAGES = 15;
+
+/**
+ * Validates and parses the MAX_OCR_PAGES environment variable.
+ * Falls back to DEFAULT_MAX_OCR_PAGES on invalid, zero, negative, non-integer, or missing values.
+ * Strictly bounded by HARD_CEILING_OCR_PAGES to prevent memory exhaustion.
+ */
+export const getMaxOcrPages = () => {
+  const envVal = process.env.MAX_OCR_PAGES;
+  if (!envVal || typeof envVal !== "string") {
+    return DEFAULT_MAX_OCR_PAGES;
+  }
+  const parsed = Number(envVal.trim());
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return DEFAULT_MAX_OCR_PAGES;
+  }
+  return Math.min(parsed, HARD_CEILING_OCR_PAGES);
+};
+
 // ─── Lazy-load pdf-parse ──────────────────────────────────────────────────────
 // Loaded lazily so a missing package does not crash the server at startup.
 // pdf-parse is a CommonJS module — createRequire is needed in an ESM context.
@@ -94,18 +115,21 @@ const extractPagesFromBuffer = async (buffer) => {
     },
   });
 
+  const totalPdfPages = pdfData?.numpages || pageTexts.length || 0;
+
   // If pagerender successfully populated per-page arrays, use them.
+  let resultPages = [];
   if (pageTexts.length > 0) {
-    return pageTexts.map((text, i) => ({ page: i + 1, text: cleanText(text) }));
+    resultPages = pageTexts.map((text, i) => ({ page: i + 1, text: cleanText(text) }));
+  } else if (pdfData.text && pdfData.text.trim().length >= MIN_TEXT_LENGTH) {
+    // Fallback: pdf-parse collected all text in pdfData.text (no per-page split).
+    // Treat entire document as a single "page 1".
+    resultPages = [{ page: 1, text: cleanText(pdfData.text) }];
   }
 
-  // Fallback: pdf-parse collected all text in pdfData.text (no per-page split).
-  // Treat entire document as a single "page 1".
-  if (pdfData.text && pdfData.text.trim().length >= MIN_TEXT_LENGTH) {
-    return [{ page: 1, text: cleanText(pdfData.text) }];
-  }
-
-  return []; // No extractable text — caller will trigger OCR fallback
+  // Attach totalPdfPages metadata while preserving Array contract
+  resultPages.totalPdfPages = totalPdfPages;
+  return resultPages;
 };
 
 // ─── Lazy-load OCR dependencies ───────────────────────────────────────────────
@@ -148,50 +172,47 @@ const getTesseract = () => {
  * OCR Fallback — uses tesseract.js + pdf-img-convert to extract text from
  * scanned / image-based PDFs that yield no text via pdf-parse.
  *
- * Pipeline:
- *  1. Convert each PDF page to a PNG Uint8Array via pdf-img-convert
- *  2. Create a single Tesseract worker (English) for the whole document
- *  3. Run worker.recognize() on each page image
- *  4. Concatenate all page texts and return as an array of { page, text }
+ * Pipeline (SEC-014 bounded memory protection):
+ *  1. Bound the requested pages to MAX_OCR_PAGES (default 10, hard ceiling 15)
+ *  2. Create a single Tesseract worker (English) for the document
+ *  3. Convert and OCR pages incrementally one-by-one to bound memory
+ *  4. Promptly dereference each page image buffer before processing the next page
+ *  5. Ensure worker is always terminated in a finally block
  *
  * @param {Buffer} pdfBuffer - Raw PDF bytes
  * @param {Object} paper     - Paper document (for logging)
+ * @param {number} [totalPages=0] - Total document pages (if known from pdf-parse)
  * @returns {Promise<Array<{page: number, text: string}>>}
  */
-const runOcrOnBuffer = async (pdfBuffer, paper) => {
+export const runOcrOnBuffer = async (pdfBuffer, paper, totalPages = 0) => {
   console.log(
     `[AI Ingestor] Starting OCR for scanned PDF: "${paper.title}" (ID: ${paper._id})`
   );
 
   const pdfImgConvert = getPdfImgConvert();
   const { createWorker } = getTesseract();
+  const maxOcrPages = getMaxOcrPages();
 
-  // Step 1: Convert PDF pages to PNG image buffers
-  // pdf-img-convert accepts a Buffer and returns an array of Uint8Array (one per page)
-  let pageImages;
-  try {
-    pageImages = await pdfImgConvert.convert(pdfBuffer, {
-      width: 1700,       // High resolution for better OCR accuracy
-      height: 2200,
-      page_numbers: null, // null = all pages
-      base64: false,      // Return Uint8Array, not base64 string
-    });
-  } catch (convertErr) {
-    console.error(
-      `[AI Ingestor] PDF→image conversion failed for "${paper.title}":`,
-      convertErr.message
-    );
-    return [];
+  let detectedTotalPages = totalPages;
+  if (!detectedTotalPages) {
+    try {
+      const pdfParse = getPdfParse();
+      const data = await pdfParse(pdfBuffer, { max: 1 });
+      detectedTotalPages = data?.numpages || 0;
+    } catch {
+      detectedTotalPages = 0;
+    }
   }
 
-  if (!pageImages || pageImages.length === 0) {
-    console.warn(`[AI Ingestor] No page images produced for "${paper.title}".`);
-    return [];
+  let pagesToProcess = maxOcrPages;
+  if (detectedTotalPages > 0) {
+    if (detectedTotalPages > maxOcrPages) {
+      console.warn(
+        `[AI Ingestor] Scanned PDF "${paper.title}" has ${detectedTotalPages} page(s), exceeding OCR ceiling (${maxOcrPages}). Limiting OCR to first ${maxOcrPages} page(s).`
+      );
+    }
+    pagesToProcess = Math.min(detectedTotalPages, maxOcrPages);
   }
-
-  console.log(
-    `[AI Ingestor] Converted ${pageImages.length} page(s) to images — running OCR...`
-  );
 
   // Step 2: Create a single Tesseract worker for all pages (more efficient)
   const worker = await createWorker("eng", 1, {
@@ -203,13 +224,36 @@ const runOcrOnBuffer = async (pdfBuffer, paper) => {
 
   const pages = [];
   try {
-    // Step 3: OCR each page image
-    for (let i = 0; i < pageImages.length; i++) {
-      const imageBuffer = Buffer.from(pageImages[i]);
+    // Step 3: Convert and OCR pages sequentially, releasing buffers incrementally (SEC-014)
+    for (let pageNo = 1; pageNo <= pagesToProcess; pageNo++) {
+      let pageImages;
+      try {
+        pageImages = await pdfImgConvert.convert(pdfBuffer, {
+          width: 1700,        // High resolution for better OCR accuracy
+          height: 2200,
+          page_numbers: [pageNo], // Explicit single page: bounded concurrency
+          base64: false,       // Return Uint8Array, not base64 string
+        });
+      } catch (convertErr) {
+        console.error(
+          `[AI Ingestor] PDF page ${pageNo} image conversion failed for "${paper.title}":`,
+          convertErr.message
+        );
+        continue;
+      }
+
+      if (!pageImages || pageImages.length === 0) {
+        // End of document reached
+        break;
+      }
+
+      const imageBuffer = Buffer.from(pageImages[0]);
+      pageImages = null; // Promptly release reference to Uint8Array
+
       const { data } = await worker.recognize(imageBuffer);
       const text = cleanText(data.text || "");
       if (text.length > 0) {
-        pages.push({ page: i + 1, text });
+        pages.push({ page: pageNo, text });
       }
     }
   } finally {
@@ -218,7 +262,7 @@ const runOcrOnBuffer = async (pdfBuffer, paper) => {
   }
 
   console.log(
-    `[AI Ingestor] OCR complete — extracted text from ${pages.length}/${pageImages.length} page(s) ` +
+    `[AI Ingestor] OCR complete — extracted text from ${pages.length} page(s) ` +
     `for "${paper.title}".`
   );
 
@@ -267,7 +311,8 @@ export const processPaper = async (paper) => {
     if (totalExtracted < MIN_TEXT_LENGTH) {
       if (pdfBuffer) {
         try {
-          const ocrPages = await runOcrOnBuffer(pdfBuffer, paper);
+          const totalPdfPages = pages.totalPdfPages || 0;
+          const ocrPages = await runOcrOnBuffer(pdfBuffer, paper, totalPdfPages);
           if (ocrPages.length > 0) {
             pages = ocrPages;
           }

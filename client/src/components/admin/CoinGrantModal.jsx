@@ -32,10 +32,6 @@ const CoinGrantModal = ({ user, isOpen, onClose, onSuccess }) => {
   const currentCoins = user.coins || 0;
   const projectedBalance = isValidAmount ? currentCoins + numAmount : currentCoins;
 
-  const handleQuickAdd = (val) => {
-    setAmount(String((parseInt(amount, 10) || 0) + val));
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 

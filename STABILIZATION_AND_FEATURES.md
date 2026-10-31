@@ -25,12 +25,12 @@
 - **Paper Unlocking Costs**:
   - **Preview Access**: 10 coins (free for the author and administrators).
   - **Download Access**: 40 coins (discounted to 30 coins if previously previewed).
-- **Contributor Earnings**: Authors receive 20 coins reward upon admin approval of their submitted paper.
+- **Contributor Earnings**: Authors receive 30 coins reward upon admin approval of their submitted paper.
 - **Coin Wallet** ([`client/src/pages/Wallet.jsx`](file:///C:/Users/SWARNENDU/Downloads/StudyTogether/client/src/pages/Wallet.jsx)): Interface for purchasing coin packages (*Starter: 100 coins for ₹29; Popular: 250 coins for ₹59; Premium: 500 coins for ₹99*), Razorpay checkout modal, and transaction history ledger.
 
 #### Social & Gamification Mechanics
 - **Ratings**: 1-to-5 star rating modal with live calculation of average rating and popularity score.
-- **Rank & Badge Progression** ([`server/services/badgeService.js`](file:///C:/Users/SWARNENDU/Downloads/StudyTogether/server/services/badgeService.js)): Dynamic tier progression (*Newbie -> Bronze -> Silver -> Gold -> Diamond*) based on upload counts and engagement.
+- **Rank & Badge Progression** ([`server/services/rankService.js`](file:///C:/Users/SWARNENDU/Downloads/StudyTogether/server/services/rankService.js), [`server/services/badgeService.js`](file:///C:/Users/SWARNENDU/Downloads/StudyTogether/server/services/badgeService.js)): Dynamic tier progression (*Beginner -> Explorer -> Scholar -> Expert -> Legend*) calculated from coins and approved uploads.
 - **Leaderboard** ([`client/src/pages/Leaderboard.jsx`](file:///C:/Users/SWARNENDU/Downloads/StudyTogether/client/src/pages/Leaderboard.jsx)): Public ranking of top student contributors.
 - **Activity Logging** ([`server/services/activityService.js`](file:///C:/Users/SWARNENDU/Downloads/StudyTogether/server/services/activityService.js)): User activity feed tracking uploads, rank advancements, and earned badges.
 
@@ -87,7 +87,7 @@
 
 | Service | Requirement Level | Setup Details |
 | :--- | :--- | :--- |
-| **MongoDB** | **Mandatory** | Connection string required in `server/.env` and `ai/.env`. Can use local (`mongodb://127.0.0.1:27017/studytogether`) or free MongoDB Atlas cluster. |
+| **MongoDB** | **Mandatory** | Connection string required in root `.env` (`MONGODB_URI`). Can use local (`mongodb://127.0.0.1:27017/studytogether`) or free MongoDB Atlas cluster. |
 | **Cloudinary** | **Required for Uploads** | Free Cloudinary credentials (`CLOUD_NAME`, `API_KEY`, `API_SECRET`) needed for uploading PDFs to Cloudinary raw storage. |
 | **Razorpay** | **Optional for Dev** | Test Key ID & Secret needed for the checkout modal. (In local dev, coins can also be credited via the wallet purchase route). |
 | **Ollama** | **Optional for Core Web** | Only required if testing local AI document embeddings (`nomic-embed-text`) and chat generation (`mistral`) on port 11434. |
@@ -123,19 +123,28 @@ cd ..
 
 ### Step 2: Create Environment Configuration Files
 
-#### A. Backend Configuration: Create `server/.env`
+#### A. Unified Backend & AI Configuration: Create root `.env`
+Copy the repository template `.env.example` to `.env` in the project root:
+```bash
+cp .env.example .env
+```
+Both the Main Backend Server (`server/config/env.js`) and the AI Copilot Microservice (`ai/server.js`) resolve and load configuration directly from this root `.env` file:
 ```env
 # Server Runtime
 PORT=5000
 NODE_ENV=development
 CLIENT_URL=http://localhost:5173
 
-# Database
+# Database (Shared across Backend and AI Microservice)
 MONGODB_URI=mongodb://localhost:27017/studytogether
 
 # Authentication Keys (Replace with your own 32+ character random strings)
 JWT_SECRET=studytogether_dev_jwt_secret_key_2026_secure
 JWT_REFRESH_SECRET=studytogether_dev_refresh_jwt_secret_key_2026_secure
+
+# Inter-Service Communication (Backend <-> AI Microservice)
+INTERNAL_SERVICE_KEY=your_internal_service_key_secret_here
+AI_SERVICE_URL=http://localhost:5001
 
 # Cloudinary Storage (Required for PDF uploading)
 CLOUD_NAME=your_cloudinary_cloud_name
@@ -147,23 +156,9 @@ RAZORPAY_KEY_ID=rzp_test_your_key_id
 RAZORPAY_KEY_SECRET=your_razorpay_secret
 RAZORPAY_WEBHOOK_SECRET=your_webhook_secret
 
-# Inter-service URL
-AI_SERVICE_URL=http://localhost:5001
-```
-
-#### B. Frontend Configuration: Create `client/.env`
-```env
-VITE_API_URL=http://localhost:5000/api/v1
-VITE_AI_API_URL=http://localhost:5001/api/v1
-```
-
-#### C. AI Microservice Configuration: Create `ai/.env`
-```env
+# AI Microservice Configuration
 AI_PORT=5001
-NODE_ENV=development
-MONGODB_URI=mongodb://localhost:27017/studytogether
 CORS_ORIGIN=http://localhost:5173
-JWT_SECRET=studytogether_dev_jwt_secret_key_2026_secure
 
 # LLM Model Provider
 AI_PROVIDER=ollama
@@ -172,11 +167,28 @@ OLLAMA_MODEL=mistral
 EMBEDDING_MODEL=nomic-embed-text
 ```
 
+#### B. Frontend Configuration: Create `client/.env` (Optional)
+Vite defaults to `http://localhost:5000/api/v1` and `http://localhost:5001/api/v1` automatically. To override:
+```env
+VITE_API_URL=http://localhost:5000/api/v1
+VITE_AI_API_URL=http://localhost:5001/api/v1
+```
+
 ---
 
 ### Step 3: Run the Application Locally
 
-#### Option 1: Standard Web Platform (Client + Main Server)
+#### Option 1: Full-Stack Mode (Concurrent All-in-One — Recommended)
+From the project root:
+```bash
+npm run dev:all
+```
+Concurrently launches:
+- Frontend UI: `http://localhost:5173`
+- Backend API: `http://localhost:5000`
+- AI Copilot API: `http://localhost:5001`
+
+#### Option 2: Standard Web Platform (Client + Main Server)
 From the project root:
 ```bash
 npm run dev
@@ -184,29 +196,37 @@ npm run dev
 - Frontend UI: `http://localhost:5173`
 - Backend API: `http://localhost:5000`
 
-#### Option 2: Full-Stack Mode (Client + Server + AI Microservice)
+#### Option 3: Independent Terminal Processes
 Run each process in an independent terminal window:
 - **Terminal 1**: `cd server && npm run dev`
 - **Terminal 2**: `cd client && npm run dev`
-- **Terminal 3**: `cd ai && npm run dev`
+- **Terminal 3**: `npm run ai` or `cd ai && npm run dev`
 - **Terminal 4 (Optional)**: `ollama serve` (if running local AI)
+
+#### Automated Test Execution
+Run all backend and AI microservice tests from the project root:
+```bash
+npm test
+```
+To run frontend linting and production build verification:
+```bash
+cd client && npm run lint && npm run build
+```
 
 ---
 
-## 5. Current Blockers Preventing Local Execution
+## 5. Current Blockers & Configuration Notes
 
-1. **Missing `.env` Files & Startup Exit Guard**:
-   - `server/.env` is missing on fresh clones.
+1. **Missing Root `.env` File & Startup Exit Guard**:
+   - Root `.env` is not committed to git. Copy `.env.example` to `.env` in the repository root before starting services.
    - [`server/server.js#L28-L41`](file:///C:/Users/SWARNENDU/Downloads/StudyTogether/server/server.js#L28-L41) contains mandatory exit checks: if `MONGODB_URI`, `JWT_SECRET`, or `JWT_REFRESH_SECRET` are not set, the process prints an error and terminates (`process.exit(1)`).
-2. **Incomplete Template in `server/.env.example`**:
-   - [`server/.env.example`](file:///C:/Users/SWARNENDU/Downloads/StudyTogether/server/.env.example) currently contains only 4 lines, omitting `PORT`, `CLIENT_URL`, `CLOUD_NAME`, `API_KEY`, `API_SECRET`, and Razorpay keys.
-3. **CORS Blocker Without `CLIENT_URL`**:
+2. **Template in `.env.example`**:
+   - The canonical template is located at `.env.example` in the project root, containing all required environment keys for backend, frontend, and AI microservice.
+3. **CORS Configuration via `CLIENT_URL`**:
    - [`server/server.js#L51`](file:///C:/Users/SWARNENDU/Downloads/StudyTogether/server/server.js#L51) reads `origin: process.env.CLIENT_URL`.
-   - If `CLIENT_URL` is omitted, the allowed origin is `undefined`. Because the client sends credentials (`withCredentials: true`), browser requests from `http://localhost:5173` fail with CORS preflight errors.
-4. **Missing `client/.env.example` and `ai/.env.example`**:
-   - No templates exist in `client/` or `ai/` directories, making setup unclear for new contributors.
-5. **Root `package.json` Dev Script Omits AI Microservice**:
-   - `"dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\""` starts only `server` and `client`. Requests to `/api/v1/ai` fail unless `ai/` is launched manually.
+   - Ensure `CLIENT_URL=http://localhost:5173` is present in root `.env` to prevent browser CORS preflight errors with credentials.
+4. **Full-Stack Execution**:
+   - Root `package.json` contains `"dev:all"` to run `server`, `client`, and `ai` concurrently, as well as `"ai": "node ai/server.js"` to run the AI microservice independently.
 
 ---
 
@@ -244,10 +264,10 @@ These features integrate directly with existing database models and UI pages wit
 
 ```
 +-------------------------------------------------------------------------------+
-| Phase 1: Local Setup & Environment Standardization                            |
-| - Generate complete, documented .env.example files for server/, client/, ai/  |
-| - Add safe fallback defaults for CLIENT_URL in server.js (http://localhost:5173)|
-| - Update root package.json with convenient dev:all script                     |
+| Phase 1: Local Setup & Environment Standardization [COMPLETED]                |
+| - Standardized root .env.example with complete backend & AI config keys       |
+| - Configured root dev:all script for full-stack concurrent startup            |
+| - Integrated automated test runner (npm test) across server/test/ & ai/test/  |
 +-------------------------------------------------------------------------------+
                                        |
                                        v

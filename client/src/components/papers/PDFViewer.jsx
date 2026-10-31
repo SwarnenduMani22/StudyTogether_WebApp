@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 
 /* ✅ FINAL WORKER (V5 COMPATIBLE) */
@@ -21,13 +21,16 @@ const PDFViewer = ({ file }) => {
     return file;
   }, [file]);
   console.log("Viewer file 👉", file);
-  useEffect(() => {
+
+  const [prevFile, setPrevFile] = useState(safeFile);
+  if (prevFile !== safeFile) {
+    setPrevFile(safeFile);
     setNumPages(null);
     setPageNumber(1);
     setScale(1.2);
     setLoading(true);
     setError("");
-  }, [safeFile]);
+  }
 
   /* ================= LOAD SUCCESS ================= */
 

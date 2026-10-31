@@ -11,7 +11,7 @@ Thank you for your interest in contributing to StudyTogether! This guide will he
 3. [Prerequisites](#3-prerequisites)
 4. [Installation Steps](#4-installation-steps)
 5. [Running Frontend](#5-running-frontend)
-6. [Running Backend](#6-running-backend)
+6. [Running Backend & Microservices](#6-running-backend--microservices)
 7. [Environment Variables](#7-environment-variables)
 8. [Branch Naming Convention](#8-branch-naming-convention)
 9. [Commit Message Convention](#9-commit-message-convention)
@@ -53,18 +53,30 @@ Ensure you have the following installed on your machine:
 
 1.  **Fork and Clone**: Fork the repository on GitHub and clone it:
     ```bash
-    git clone https://github.com/your-username/FINAL_YEAR.git
-    cd FINAL_YEAR
+    git clone https://github.com/your-username/StudyTogether.git
+    cd StudyTogether
     ```
-2.  **Install Server Dependencies**:
+2.  **Install Root Workspace Dependencies**:
+    ```bash
+    npm install
+    ```
+3.  **Install Server Dependencies**:
     ```bash
     cd server
     npm install
+    cd ..
     ```
-3.  **Install Client Dependencies**:
+4.  **Install Client Dependencies**:
     ```bash
-    cd ../client
+    cd client
     npm install
+    cd ..
+    ```
+5.  **Install AI Microservice Dependencies**:
+    ```bash
+    cd ai
+    npm install
+    cd ..
     ```
 
 ---
@@ -79,21 +91,38 @@ The application will start on `http://localhost:5173`.
 
 ---
 
-## 6. Running Backend
-To run the Express development server (with nodemon auto-restart):
+## 6. Running Backend & Microservices
+
+### Option A: Run Full Stack Concurrently (Recommended)
+From the project root:
 ```bash
-cd server
+npm run dev:all
+```
+This concurrently starts:
+*   **React Frontend (Vite)** on `http://localhost:5173`
+*   **Main Backend (Express)** on `http://localhost:5000`
+*   **AI Copilot Microservice** on `http://localhost:5001`
+
+To run standard web mode without the AI microservice:
+```bash
 npm run dev
 ```
-The server will start on `http://localhost:5000`.
+
+### Option B: Run Services Individually
+*   **Backend Server**: `cd server && npm run dev` (starts on `http://localhost:5000`)
+*   **AI Microservice**: `npm run ai` or `cd ai && npm run dev` (starts on `http://localhost:5001`)
 
 ---
 
 ## 7. Environment Variables
-You need to configure your environment variables. 
-1.  Copy `.env.example` in the project root to `server/.env`.
-2.  Add your database credentials, JWT secrets, Cloudinary credentials, and Razorpay API keys to `server/.env`.
-3.  Copy `.env.example` to `client/.env` and configure `VITE_API_URL`.
+You need to configure your environment variables:
+1.  Copy `.env.example` in the project root to `.env` in the repository root:
+    ```bash
+    cp .env.example .env
+    ```
+    *Note: Both the main Backend Server (`server/config/env.js`) and the AI Copilot Microservice (`ai/server.js`) load from this root `.env` file.*
+2.  Add your database credentials (`MONGODB_URI`), JWT secrets, Cloudinary credentials, and Razorpay API keys to `.env`.
+3.  *(Optional)* If you need custom client API URLs, create `client/.env` and configure `VITE_API_URL` and `VITE_AI_API_URL` (defaults to port 5000 and 5001).
 
 ---
 
@@ -144,9 +173,11 @@ We follow standard conventional commit naming rules:
 
 ## 13. Testing Guidelines
 Before submitting a PR, ensure that:
-*   Your changes run without compilation warnings or console errors.
-*   Form fields are verified with proper validation (e.g., 8-character password limits, non-empty fields).
-*   Mock payloads run successfully on postman or equivalent API testing client.
+*   **Run Automated Backend & AI Test Suites**: Execute `npm test` from the project root. All test suites under `server/test/` and `ai/test/` must pass cleanly without failures.
+*   **Run Frontend Linter**: Execute `npm run lint` inside `client/` and ensure 0 errors and 0 warnings.
+*   **Validate Production Build**: Execute `npm run build` inside `client/` to verify Vite bundle compilation without syntax or module resolution errors.
+*   **Validation Rules**: Form fields and endpoints are verified with proper validation (e.g., semester between 1 and 8, allowed subjects, non-empty fields).
+*   **Regression Tests**: New features and bug fixes must include corresponding regression tests in `server/test/` or `ai/test/` using Node's native test runner (`node:test`).
 
 ---
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { getPapers } from "../api/paper";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import InfiniteScroll from "react-infinite-scroll-component";
@@ -9,7 +9,7 @@ import Skeleton from "../components/common/Skeleton";
 const Papers = () => {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [suggestions, setSuggestions] = useState([]);
+  const [selectedSuggestion, setSelectedSuggestion] = useState(false);
 
   const [semester, setSemester] = useState("all");
   const [subject, setSubject] = useState("all");
@@ -54,20 +54,19 @@ const Papers = () => {
     },
   });
 
-  const papers = data ? data.pages.flatMap(page => page.papers) : [];
+  const papers = useMemo(() => {
+    return data ? data.pages.flatMap((page) => page.papers || []) : [];
+  }, [data]);
 
   /* ================= SEARCH SUGGEST ================= */
 
-  useEffect(() => {
-    if (!search.trim()) return setSuggestions([]);
-    
-    // Only search through the currently loaded papers to save DB load
-    const filtered = papers
+  const suggestions = useMemo(() => {
+    if (selectedSuggestion || !search.trim()) return [];
+
+    return papers
       .filter((p) => p.title.toLowerCase().includes(search.toLowerCase()))
       .slice(0, 5);
-
-    setSuggestions(filtered);
-  }, [search, papers]);
+  }, [papers, search, selectedSuggestion]);
 
   /* ================= DELETE REFRESH ================= */
 
@@ -91,7 +90,10 @@ const Papers = () => {
               type="text"
               placeholder="Search papers..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setSelectedSuggestion(false);
+              }}
               className="input md:w-64"
             />
 
@@ -102,7 +104,7 @@ const Papers = () => {
                     key={item._id}
                     onClick={() => {
                       setSearch(item.title);
-                      setSuggestions([]);
+                      setSelectedSuggestion(true);
                     }}
                     className="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-sm text-gray-800 dark:text-white"
                   >

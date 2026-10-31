@@ -25,7 +25,7 @@ const AIAssistant = () => {
         if (res.data && res.data.active === false) {
           setAiActive(false);
         }
-      } catch (err) {
+      } catch {
         setAiActive(false);
       } finally {
         setIsChecking(false);
@@ -136,7 +136,7 @@ const AIAssistant = () => {
               setConversationId(payload.conversationId);
             }
           }
-        } catch (e) {
+        } catch {
           // ignore malformed SSE event payloads safely
         }
       };

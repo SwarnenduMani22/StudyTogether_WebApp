@@ -187,7 +187,7 @@ const UploadPaper = () => {
 
         {limitReached && user?.role !== "admin" && (
           <div className="bg-red-100 text-red-600 p-3 rounded mb-6 text-center">
-            Upload limit reached (Max 2 pending papers)
+            Upload limit reached (Max 2 pending papers). You can still save drafts.
           </div>
         )}
 
@@ -197,14 +197,14 @@ const UploadPaper = () => {
             placeholder="Paper Title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            disabled={limitReached && user?.role !== "admin"}
+            disabled={loading}
           />
 
           <select
             className="input"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            disabled={limitReached && user?.role !== "admin"}
+            disabled={loading}
           >
             <option value="">Select Subject</option>
             <option value="Data Structure">Data Structure</option>
@@ -221,7 +221,7 @@ const UploadPaper = () => {
             className="input"
             value={semester}
             onChange={(e) => setSemester(e.target.value)}
-            disabled={limitReached && user?.role !== "admin"}
+            disabled={loading}
           >
             <option value="">Select Semester</option>
             {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
@@ -238,7 +238,7 @@ const UploadPaper = () => {
               console.log(e.target.files);
               setFile(e.target.files?.[0] || null);
             }}
-            disabled={limitReached && user?.role !== "admin"}
+            disabled={loading}
           />
           <p>{file?.name}</p>
           <div className="flex gap-4">
