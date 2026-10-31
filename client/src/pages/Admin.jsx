@@ -7,6 +7,8 @@ import CoinGrantModal from "../components/admin/CoinGrantModal";
 import useAuth from "../hooks/useAuth";
 import toast from "react-hot-toast";
 import {
+  getAdminStats,
+  getUsers,
   getPaymentAnalytics,
   getPackageSales,
   getPaymentList,
@@ -57,9 +59,9 @@ const Admin = () => {
 
   const fetchUsers = useCallback(async () => {
     try {
-      const res = await api.get("/admin/users");
+      const data = await getUsers();
 
-      const usersData = res?.data?.users || res?.data || [];
+      const usersData = data?.users || data || [];
 
       setUsers(Array.isArray(usersData) ? usersData : []);
     } catch (err) {
@@ -73,9 +75,7 @@ const Admin = () => {
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await api.get("/admin/stats");
-
-      const data = res?.data || {};
+      const data = (await getAdminStats()) || {};
 
       setStats({
         users: data.users || 0,

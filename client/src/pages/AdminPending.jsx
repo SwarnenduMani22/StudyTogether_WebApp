@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../api/axios";
+import { getPendingPapers, approvePaper } from "../api/admin";
 import toast from "react-hot-toast";
 import PDFModal from "../components/papers/PDFModal";
 import resolvePdfUrl from "../utils/resolvePdfUrl";
@@ -17,8 +18,8 @@ const AdminPending = () => {
       setLoading(true);
       setError("");
 
-      const res = await api.get("/papers/admin/pending");
-      setPapers(res.data?.papers || []);
+      const data = await getPendingPapers();
+      setPapers(data?.papers || []);
     } catch {
       setError("Failed to load pending papers");
     } finally {
@@ -26,11 +27,11 @@ const AdminPending = () => {
     }
   };
 
-  const approvePaper = async (id) => {
+  const handleApprove = async (id) => {
     try {
       setProcessingId(id);
 
-      await api.put(`/papers/admin/approve/${id}`);
+      await approvePaper(id);
 
       toast.success("Approved");
       setPapers((prev) => prev.filter((p) => p._id !== id));
@@ -106,7 +107,7 @@ const AdminPending = () => {
                   </button>
 
                   <button
-                    onClick={() => approvePaper(paper._id)}
+                    onClick={() => handleApprove(paper._id)}
                     disabled={isProcessing}
                     className="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition"
                   >

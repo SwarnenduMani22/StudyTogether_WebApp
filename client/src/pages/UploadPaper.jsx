@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import { uploadPaper } from "../api/paper";
-import api from "../api/axios";
+import { uploadPaper, getMyPapers } from "../api/paper";
 import useAuth from "../hooks/useAuth";
 import toast from "react-hot-toast";
 
@@ -26,9 +25,7 @@ const UploadPaper = () => {
   useEffect(() => {
     const loadUserStats = async () => {
       try {
-        const res = await api.get("/users/my-papers");
-
-        const data = res.data;
+        const data = (await getMyPapers()) || {};
 
         const approved = data.approved || 0;
         const pending = data.pending || 0;
@@ -53,9 +50,9 @@ const UploadPaper = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       if (user) {
-        api.get("/users/my-papers").then((res) => {
-          const approved = res.data.approved || 0;
-          const pending = res.data.pending || 0;
+        getMyPapers().then((data) => {
+          const approved = data?.approved || 0;
+          const pending = data?.pending || 0;
 
           setStats({
             approved,
@@ -64,7 +61,7 @@ const UploadPaper = () => {
           });
 
           setLimitReached(pending >= 2);
-        });
+        }).catch(() => {});
       }
     }, 5000);
 

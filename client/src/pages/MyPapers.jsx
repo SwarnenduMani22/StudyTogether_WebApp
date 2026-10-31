@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../api/axios";
+import { getMyPapers } from "../api/paper";
 import resolvePdfUrl from "../utils/resolvePdfUrl";
 
 import Skeleton from "../components/common/Skeleton";
@@ -32,9 +33,7 @@ const MyPapers = () => {
       setLoading(true);
       setError("");
 
-      const res = await api.get("/users/my-papers");
-
-      const data = res?.data || {};
+      const data = (await getMyPapers()) || {};
 
       setPapers(data.papers || []);
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import api from "../api/axios";
+import { getBookmarks } from "../api/paper";
 import useAuth from "../hooks/useAuth";
 
 import PaperCard from "../components/papers/PaperCard";
@@ -22,9 +22,7 @@ const Bookmarks = () => {
       setLoading(true);
       setError("");
 
-      const res = await api.get("/users/profile");
-
-      const bookmarks = res?.data?.user?.bookmarks || [];
+      const bookmarks = await getBookmarks();
 
       setPapers(Array.isArray(bookmarks) ? bookmarks : []);
     } catch (err) {

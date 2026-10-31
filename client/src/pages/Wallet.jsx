@@ -1,18 +1,21 @@
 import { useEffect, useState } from "react";
 import {
   getCoinOverview,
+  getCoinPackages,
   createOrder,
   verifyPayment,
   getPaymentHistory,
 } from "../api/coinApi";
 import useAuth from "../hooks/useAuth";
 import toast from "react-hot-toast";
-import coinPackages from "../data/coinPackages";
 import PurchaseModal from "../components/wallet/PurchaseModel";
 import PaymentHistory from "../components/wallet/PaymentHistory";
 const Wallet = () => {
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [packages, setPackages] = useState([]);
+  const [packagesLoading, setPackagesLoading] = useState(true);
+  const [packagesError, setPackagesError] = useState("");
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [filter, setFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
@@ -20,22 +23,22 @@ const Wallet = () => {
   const TRANSACTIONS_PER_PAGE = 10;
   const { user, updateUser } = useAuth();
   const handleBuy = (pkg) => {
+    if (!pkg || !pkg.id) {
+      toast.error("Package data is not available");
+      return;
+    }
     setSelectedPackage(pkg);
-
-    console.log("Selected Package:", pkg);
   };
   const handleCloseModal = () => {
     setSelectedPackage(null);
   };
   const handleConfirmPurchase = async (pkg) => {
     try {
-      const packageMap = {
-        1: "starter",
-        2: "popular",
-        3: "premium",
-      };
-
-      const packageId = packageMap[pkg.id];
+      const packageId = pkg?.id;
+      if (!packageId) {
+        toast.error("Invalid package selected");
+        return;
+      }
 
       const { order, key } = await createOrder(packageId);
 
@@ -131,10 +134,29 @@ const Wallet = () => {
       console.error("Payment history load failed:", error);
     }
   };
+  const loadPackages = async () => {
+    try {
+      setPackagesLoading(true);
+      setPackagesError("");
+      const data = await getCoinPackages();
+      const list = data?.packages || data || [];
+      setPackages(Array.isArray(list) ? list : []);
+    } catch (err) {
+      console.error("Coin packages load failed:", err);
+      setPackagesError("Failed to load coin packages");
+      setPackages([]);
+    } finally {
+      setPackagesLoading(false);
+    }
+  };
   useEffect(() => {
     loadWallet(currentPage, filter);
     loadPayments();
   }, [currentPage, filter]);
+
+  useEffect(() => {
+    loadPackages();
+  }, []);
 
   if (loading) {
     return <div>Loading wallet...</div>;
@@ -172,37 +194,57 @@ const Wallet = () => {
           <h2 className="text-xl font-semibold">Buy Coins</h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {coinPackages.map((pkg) => (
-            <div
-              key={pkg.id}
-              className={`p-4 rounded-lg ${
-                pkg.popular
-                  ? "border-2 border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20"
-                  : "bg-gray-100 dark:bg-gray-800"
-              }`}
+        {packagesLoading ? (
+          <div className="text-gray-500 py-4">Loading coin packages...</div>
+        ) : packagesError ? (
+          <div className="text-red-500 py-4 flex items-center gap-3">
+            <span>{packagesError}</span>
+            <button
+              onClick={loadPackages}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1 rounded"
             >
-              {pkg.popular && (
-                <span className="text-xs bg-indigo-600 text-white px-2 py-1 rounded">
-                  MOST POPULAR
-                </span>
-              )}
+              Retry
+            </button>
+          </div>
+        ) : packages.length === 0 ? (
+          <div className="text-gray-500 py-4">No coin packages available at this time.</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {packages.map((pkg) => {
+              const isPopular = pkg.id === "popular" || pkg.popular;
+              return (
+                <div
+                  key={pkg.id}
+                  className={`p-4 rounded-lg ${
+                    isPopular
+                      ? "border-2 border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20"
+                      : "bg-gray-100 dark:bg-gray-800"
+                  }`}
+                >
+                  {isPopular && (
+                    <span className="text-xs bg-indigo-600 text-white px-2 py-1 rounded">
+                      MOST POPULAR
+                    </span>
+                  )}
 
-              <h3 className="font-semibold mt-2">{pkg.name}</h3>
+                  <h3 className="font-semibold mt-2">{pkg.name}</h3>
 
-              <p className="text-2xl font-bold">{pkg.coins} 🪙</p>
+                  <p className="text-2xl font-bold">{pkg.coins} 🪙</p>
 
-              <p className="text-sm text-gray-500">₹{pkg.price}</p>
+                  <p className="text-sm text-gray-500">₹{pkg.price}</p>
 
-              <button
-                onClick={() => handleBuy(pkg)}
-                className="mt-3 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded"
-              >
-                Buy Now
-              </button>
-            </div>
-          ))}
-        </div>
+                  <button
+                    onClick={() => handleBuy(pkg)}
+                    disabled={packagesLoading || !pkg.id}
+                    className="mt-3 w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white py-2 rounded"
+                  >
+                    Buy Now
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
       {/* Payment History */}
 
