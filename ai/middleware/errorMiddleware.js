@@ -1,5 +1,3 @@
-import multer from "multer";
-
 const errorHandler = (err, req, res, next) => {
   if (res.headersSent) {
     return next(err);
@@ -9,30 +7,11 @@ const errorHandler = (err, req, res, next) => {
   let statusCode = res.statusCode !== 200 ? res.statusCode : 500;
   let message = err.message || "Internal Server Error";
 
-  /* ================= MULTER ERRORS ================= */
-
-  if (err instanceof multer.MulterError) {
-    if (err.code === "LIMIT_FILE_SIZE") {
-      statusCode = 400;
-      message = "File size exceeds limit (10MB)";
-    } else {
-      statusCode = 400;
-      message = err.message;
-    }
-  }
-
-  /* ================= INVALID FILE TYPE ================= */
-
-  if (err.message?.includes("Only PDF")) {
-    statusCode = 400;
-    message = "Invalid file type. Only PDF allowed";
-  }
-
   /* ================= MONGOOSE VALIDATION ================= */
 
   if (err.name === "ValidationError") {
     statusCode = 400;
-    message = Object.values(err.errors)
+    message = Object.values(err.errors || {})
       .map((val) => val.message)
       .join(", ");
   }
@@ -62,6 +41,12 @@ const errorHandler = (err, req, res, next) => {
   if (err.name === "TokenExpiredError") {
     statusCode = 401;
     message = "Authentication token expired";
+  }
+
+  /* ================= PRODUCTION SANITIZATION ================= */
+
+  if (statusCode === 500 && process.env.NODE_ENV === "production") {
+    message = "Internal Server Error";
   }
 
   /* ================= RESPONSE ================= */

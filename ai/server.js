@@ -12,6 +12,7 @@ import rateLimit from "express-rate-limit";
 import aiRoutes from "./routes/index.js";
 import { checkOllamaHealth } from "./services/modelManager.js";
 import verifyInternalKey from "./middleware/internalAuth.js";
+import errorHandler from "./middleware/errorMiddleware.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -126,6 +127,9 @@ app.use("/api/v1/ai", aiRoutes);
 app.get("/health", (req, res) =>
   res.status(200).json({ status: "ok", service: "ai-module" }),
 );
+
+// Centralized error handling
+app.use(errorHandler);
 
 // MongoDB connection & Server Start
 mongoose
